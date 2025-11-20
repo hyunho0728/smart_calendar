@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Planner 2025</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Gamja+Flower&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ... (기존 스타일 코드는 그대로 두세요) ... */
+        /* 너무 길어서 생략하지만, 원래 있던 CSS 코드는 지우시면 안 됩니다! */
+        :root { --bg-grid-color: #e1e1e1; --primary-color: #4a90e2; --tape-color: rgba(160, 160, 220, 0.7); --font-hand: 'Gamja Flower', cursive; --font-body: 'Noto Sans KR', sans-serif; }
+        body { margin: 0; padding: 0; background-color: #f9f9f9; font-family: var(--font-body); color: #333; }
+        .app-container { max-width: 1200px; margin: 20px auto; padding: 30px; min-height: 90vh; background-color: white; background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px); background-size: 25px 25px; box-shadow: 0 0 20px rgba(0,0,0,0.1); position: relative; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .nav-icons i { font-size: 1.8rem; margin-left: 20px; color: #555; cursor: pointer; transition: color 0.3s; }
+        .nav-icons i:hover { color: var(--primary-color); }
+        a { text-decoration: none; color: inherit; }
+        h1, h2, h3 { font-family: var(--font-hand); }
+        .card { background: white; padding: 20px; border-radius: 4px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); position: relative; margin-bottom: 20px; }
+        .tape-top::before { content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%) rotate(-1deg); width: 120px; height: 30px; background-color: var(--tape-color); opacity: 0.8; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 1; }
+        .btn-add { background-color: #2d89ef; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 5px; cursor: pointer; font-family: var(--font-body); }
+        .btn-outline { background: white; border: 1px solid #333; padding: 5px 15px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; }
+        .dashboard-grid { display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; }
+        .col-left, .col-right { flex: 1; max-width: 300px; }
+        .col-center { flex: 1.5; max-width: 450px; }
+        .ootd-box { height: 300px; background: #f0f4f8; display: flex; align-items: center; justify-content: center; font-size: 4rem; color: #ccc; border-radius: 10px; }
+        .schedule-list { list-style: none; padding: 0; }
+        .schedule-list li { padding: 12px 5px; border-bottom: 1px dashed #ccc; font-family: var(--font-body); font-size: 0.95rem; }
+        .schedule-list li.highlight { background-color: rgba(255, 235, 59, 0.3); border-radius: 5px; }
+        .time-label { font-weight: bold; color: #0056b3; margin-right: 5px; }
+        .calendar-layout { display: flex; gap: 20px; }
+        .sidebar { width: 250px; }
+        .main-cal { flex: 1; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 2px solid #333; background: white; }
+        .cal-head { text-align: center; font-weight: bold; padding: 10px 0; border-bottom: 2px solid #333; border-right: 1px solid #ddd; background: #fdfdfd; }
+        .cal-cell { min-height: 100px; padding: 5px; border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; position: relative; cursor: pointer; transition: background 0.2s; }
+        .cal-cell:hover { background-color: #f0f8ff; }
+        .date-num { font-weight: bold; font-size: 1.1rem; padding: 5px; }
+        .event-chip { font-size: 0.8rem; padding: 3px 6px; border-radius: 8px; color: white; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bg-orange { background-color: #eebb99; }
+        .bg-blue { background-color: #aaccdd; }
+        .bg-yellow { background-color: #fffacd; color: #333; border: 1px solid #eee; }
+        .toggle-wrapper { display: flex; align-items: center; justify-content: flex-end; margin-top: 10px; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; margin-left: 10px;}
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #4cd964; }
+        input:checked + .slider:before { transform: translateX(20px); }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <div class="logo-area">
+                {% block header_content %}{% endblock %}
+            </div>
+            <div class="nav-icons">
+                <i class="fas fa-cog"></i>
+                <a href="/"><i class="fas fa-home"></i></a>
+                <a href="/calendar"><i class="far fa-calendar-alt"></i></a>
+                <i class="fas fa-search"></i>
+            </div>
+        </header>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    </body>
+</html>

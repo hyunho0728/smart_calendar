@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block header_content %}
+<!-- 날씨 위젯 -->
+<div style="display: flex; align-items: center; gap: 15px;">
+    <div style="text-align: center;">
+        <i class="fas {{ info.weather.icon }} fa-2x" style="color: #fbc02d;"></i>
+    </div>
+    <div>
+        <div style="font-size: 1.5rem; font-weight: 900; color: #333;">
+            {{ info.weather.temp }}
+        </div>
+        <div style="font-size: 0.9rem; color: #666; display: flex; align-items: center; gap: 5px;">
+             <span>{{ info.weather.status }}</span>
+             <span style="width: 1px; height: 10px; background: #ccc;"></span>
+             <span>{{ info.time_now }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- 상단 한줄 코멘트 -->
+<div style="margin-left: 20px; background: #e3f2fd; padding: 8px 15px; border-radius: 20px 20px 20px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); max-width: 300px;">
+    <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive;">
+        <i class="fas fa-robot" style="margin-right: 5px;"></i>
+        오늘 날씨 정보가 업데이트 되었습니다!
+    </p>
+</div>
+{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="font-size: 2.5rem; margin: 0; letter-spacing: 2px;">TODAY'S SCHEDULE</h1>
+</div>
+
+<div class="dashboard-grid">
+    <!-- [왼쪽 컬럼] OOTD -->
+    <div class="col-left">
+        <div class="card tape-top" style="min-height: 250px; display: flex; flex-direction: column;">
+            <h3>Suggestions - OOTD</h3>
+            <div style="flex: 1; display: flex; align-items: center; justify-content: center; background-color: #fff9c4; border-radius: 10px; padding: 20px; margin-top: 10px; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); border: 1px dashed #fbc02d;">
+                <p id="ootd-content" style="margin: 0; font-size: 1.1rem; color: #555; line-height: 1.6; text-align: center; font-family: 'Gamja Flower', cursive;">
+                    <i class="fas fa-spinner fa-spin" style="color: #ffb74d; margin-right: 5px;"></i>
+                    {{ info.ootd_text }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- [중앙 컬럼] 스케줄 & 추천 장소 -->
+    <div class="col-center">
+        <div class="card tape-top">
+            <h3>My Schedule</h3>
+            <ul class="schedule-list">
+                {% for item in info.schedule %}
+                <li>
+                    <span style="color: #e74c3c; font-weight: bold; margin-right: 5px;">
+                        {{ item.d_day }}
+                    </span>
+                    {% if item.time %}
+                    <span class="time-label" style="font-size: 0.9rem;">
+                        {{ item.time }}
+                    </span>
+                    {% endif %}
+                    <span>{{ item.title }}</span>
+                </li>
+                {% else %}
+                <li style="color: #999; text-align: center; padding: 20px 0;">
+                    예정된 일정이 없습니다.
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- 추천 장소 -->
+        <div class="card" style="margin-top: 20px; border-left: 5px solid #ffcc80;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin: 0;">📍 Recommended Place</h3>
+                <button id="refresh-place-btn" class="btn-outline" style="border: none; background: transparent; cursor: pointer; color: #888; font-size: 1rem;" title="다른 장소 추천">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <div id="place-container">
+                <p id="place-name" style="font-size: 1.2rem; font-weight: bold; margin: 10px 0; color: #555;">
+                    <i class="fas fa-spinner fa-spin"></i> 장소를 불러오는 중...
+                </p>
+                <p id="place-tags" style="color: #666; font-size: 0.9rem; margin-bottom: 15px; min-height: 20px;">
+                </p>
+                <div style="background: #eee; height: 150px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #888;">
+                    <p id="place-menu" style="margin:0; padding: 0 10px; font-family: 'Gamja Flower', cursive; font-size: 1.1rem;">
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- [오른쪽 컬럼] AI 추천 활동 -->
+    <div class="col-right">
+        <div class="card" style="border-top: 8px dotted #aaa;">
+            <!-- [수정됨] 버튼 추가 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin: 0;">💡 AI Recommendation</h3>
+                <button id="refresh-activity-btn" class="btn-outline" style="border: none; background: transparent; cursor: pointer; color: #888; font-size: 1rem;" title="다른 활동 추천">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <p class="small" style="color: #555;">&lt;Free time 활용&gt;</p>
+
+            <!-- 동적 로딩 영역 -->
+            <div id="activity-container">
+                <p id="activity-loading" style="text-align:center; color:#888; margin: 20px 0;">
+                    <i class="fas fa-spinner fa-spin"></i> 추천 활동을 찾는 중...
+                </p>
+                <ul id="activity-list" style="padding-left: 20px; line-height: 1.8; display: none;">
+                    <!-- 자바스크립트로 채워짐 -->
+                </ul>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <!-- 이 버튼은 장식용으로 남겨두거나 삭제 가능 -->
+                <button class="btn-outline" onclick="alert('더 많은 기능 준비중!')">다른 활동 보기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="position: fixed; bottom: 30px; right: 30px;">
+    <a href="/calendar" class="btn-add" style="display:inline-block; text-decoration:none; box-shadow: 2px 2px 10px rgba(0,0,0,0.3);">
+        Add to Calendar ▼
+    </a>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const weatherStatus = "{{ info.weather.status }}";
+        const weatherTemp = "{{ info.weather.temp }}";
+
+        // 1. OOTD
+        fetch('/api/get_ootd', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status: weatherStatus, temp: weatherTemp })
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('ootd-content').innerHTML = `
+                <i class="fas fa-tshirt" style="color: #ffb74d; margin-right: 5px;"></i> ${data.text}
+            `;
+        });
+
+        // 2. 장소 추천
+        function loadPlace(refresh = false) {
+            if (refresh) {
+                document.getElementById('place-name').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 새로운 장소를 찾는 중...';
+                document.getElementById('place-menu').innerText = '';
+                document.getElementById('place-tags').innerText = '';
+            }
+
+            fetch('/api/get_place', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ refresh: refresh })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('place-name').innerHTML = `
+                    <a href="https://map.naver.com/p/search/${data.name}" target="_blank" style="text-decoration:none; color:inherit; border-bottom:1px dashed #333;">
+                        ${data.name} <i class="fas fa-external-link-alt" style="font-size:0.8rem; color:#999;"></i>
+                    </a>
+                `;
+
+                const tagsHtml = data.tags.map(tag =>
+                    `<span class="btn-outline" style="margin-right: 5px; border-color: #ddd; font-size: 0.8rem;">#${tag}</span>`
+                ).join('');
+                document.getElementById('place-tags').innerHTML = tagsHtml;
+                document.getElementById('place-menu').innerHTML = `대표메뉴: ${data.menu}`;
+            })
+            .catch(err => {
+                document.getElementById('place-name').innerText = "추천 장소를 가져오지 못했습니다.";
+            });
+        }
+
+        // 3. [추가됨] 활동 추천 함수
+        function loadActivity(refresh = false) {
+            const container = document.getElementById('activity-container');
+            const list = document.getElementById('activity-list');
+            const loading = document.getElementById('activity-loading');
+
+            if (refresh) {
+                loading.style.display = 'block';
+                list.style.display = 'none';
+            }
+
+            fetch('/api/get_activity', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    refresh: refresh,
+                    status: weatherStatus,
+                    temp: weatherTemp
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                loading.style.display = 'none';
+                list.style.display = 'block';
+                list.innerHTML = '';
+
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${item.title}:</strong> ${item.desc}`;
+                    list.appendChild(li);
+                });
+            })
+            .catch(err => {
+                loading.innerText = "추천 활동을 불러오지 못했습니다.";
+            });
+        }
+
+        // 초기 실행
+        loadPlace(false);
+        loadActivity(false);
+
+        // 버튼 이벤트 리스너
+        document.getElementById('refresh-place-btn').addEventListener('click', function() {
+            loadPlace(true);
+        });
+        document.getElementById('refresh-activity-btn').addEventListener('click', function() {
+            loadActivity(true);
+        });
+    });
+</script>
+{% endblock %}
