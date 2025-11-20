@@ -8,5 +8,6 @@
 7. source .venv/Sripts/activate
 8. (가상환경 켜지는지 확인)
 9. pip install -r requirements.txt
-10. python calendar/app.py
+10. calendar 폴더 내부에 .env.example 복붙 후 내용에 api를 넣고 이름을 .env로 변경
+11. python calendar/app.py
    
