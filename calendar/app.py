@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+# (상단 임포트 및 로직은 그대로 유지)
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from datetime import datetime, timedelta
 import calendar
 import requests
@@ -570,4 +571,6 @@ def add_event():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # host='0.0.0.0' : 외부 접속 허용
+    # port=5000 : 5000번 포트 사용
+    app.run(host='0.0.0.0', port=5000, debug=True)
