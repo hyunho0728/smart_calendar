@@ -8,14 +8,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Gamja+Flower&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        /* ... (기존 스타일 코드는 그대로 두세요) ... */
-        /* 너무 길어서 생략하지만, 원래 있던 CSS 코드는 지우시면 안 됩니다! */
         :root { --bg-grid-color: #e1e1e1; --primary-color: #4a90e2; --tape-color: rgba(160, 160, 220, 0.7); --font-hand: 'Gamja Flower', cursive; --font-body: 'Noto Sans KR', sans-serif; }
         body { margin: 0; padding: 0; background-color: #f9f9f9; font-family: var(--font-body); color: #333; }
         .app-container { max-width: 1200px; margin: 20px auto; padding: 30px; min-height: 90vh; background-color: white; background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px); background-size: 25px 25px; box-shadow: 0 0 20px rgba(0,0,0,0.1); position: relative; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+
+        /* Header 스타일 수정: 내용물이 꽉 차도록 설정 */
+        header { display: flex; align-items: center; margin-bottom: 40px; width: 100%; }
+        .logo-area { width: 100%; }
+
+        /* nav-icons 스타일은 dashboard에서 쓰므로 남겨둠 (위치는 제거함) */
         .nav-icons i { font-size: 1.8rem; margin-left: 20px; color: #555; cursor: pointer; transition: color 0.3s; }
         .nav-icons i:hover { color: var(--primary-color); }
+
         a { text-decoration: none; color: inherit; }
         h1, h2, h3 { font-family: var(--font-hand); }
         .card { background: white; padding: 20px; border-radius: 4px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); position: relative; margin-bottom: 20px; }
@@ -56,18 +60,14 @@
     <div class="app-container">
         <header>
             <div class="logo-area">
+                <!-- 여기로 각 페이지의 헤더 내용이 들어옵니다 -->
                 {% block header_content %}{% endblock %}
             </div>
-            <div class="nav-icons">
-                <i class="fas fa-cog"></i>
-                <a href="/"><i class="fas fa-home"></i></a>
-                <a href="/calendar"><i class="far fa-calendar-alt"></i></a>
-                <i class="fas fa-search"></i>
-            </div>
+            <!-- 기존 nav-icons 제거됨 -->
         </header>
 
         {% block content %}{% endblock %}
     </div>
 
-    </body>
+</body>
 </html>

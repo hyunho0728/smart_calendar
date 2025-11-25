@@ -24,38 +24,39 @@
         font-weight: bold; font-size: 0.8rem;
     }
 
-    /* 하단 비는 시간 입력 폼 스타일 개선 */
+    /* 칩 스타일 업데이트 */
+    .chip {
+        padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;
+        margin-bottom: 2px; display: block; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; cursor: default;
+    }
+    /* 모두 되는 시간 (강조) */
+    .chip-common { background: #2979ff; color: white; font-weight: bold; border: 1px solid #2962ff; }
+    /* 내가 등록한 시간 */
+    .chip-mine { background: #a5d6a7; color: #1b5e20; border: 1px solid #81c784; }
+    /* 다른 사람이 등록한 시간 */
+    .chip-other { background: #eeeeee; color: #616161; border: 1px solid #e0e0e0; }
+
+    /* 입력 폼 스타일 */
     .free-time-form {
         margin-top: 20px; padding: 20px; background: #fff;
         border-radius: 12px; border: 1px solid #e0e0e0;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .form-label {
-        font-size: 0.85rem; font-weight: bold; color: #555;
-        margin-bottom: 5px; display: block;
-    }
-    .time-select-row {
-        display: flex; align-items: center; gap: 5px; margin-bottom: 10px;
-    }
-    .time-select {
-        flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px;
-        background: #fff; font-size: 0.9rem; text-align: center;
-    }
-
-    /* 칩 스타일 */
-    .chip-common { background: #4a90e2; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-bottom: 2px; display: block;}
-    .chip-mine { background: #a5d6a7; color: #1b5e20; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-bottom: 2px; display: block;}
+    .form-label { font-size: 0.85rem; font-weight: bold; color: #555; margin-bottom: 5px; display: block; }
+    .time-select-row { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
+    .time-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 0.9rem; text-align: center; }
 </style>
 
 <div class="calendar-layout" style="position: relative;">
-    <!-- [기능 1] 좌상단 초대 버튼 (링크 복사) -->
+    <!-- 초대 버튼 -->
     <button class="invite-btn" onclick="copyInviteLink()" title="초대 링크 복사">
         <i class="fas fa-link"></i>
     </button>
 
-    <aside class="sidebar card" style="padding-top: 60px;"> <!-- 버튼 공간 확보 -->
+    <aside class="sidebar card" style="padding-top: 60px;">
         <h3 style="border-bottom: 2px solid #333; padding-bottom: 10px;">
-            <i class="fas fa-users"></i> Members
+            <i class="fas fa-users"></i> Members ({{ members|length }})
         </h3>
 
         <div id="member-list" style="margin-bottom: 20px;">
@@ -63,14 +64,17 @@
             <div class="member-list-item">
                 <div class="member-avatar">{{ member.username[0] | upper }}</div>
                 <div>
-                    <div style="font-weight: bold; font-size: 0.9rem;">{{ member.username }}</div>
+                    <div style="font-weight: bold; font-size: 0.9rem;">
+                        {{ member.username }}
+                        {% if member.user_id == current_user.id %}<span style="color:#4a90e2; font-size:0.7rem;">(나)</span>{% endif %}
+                    </div>
                     <div style="font-size: 0.7rem; color: #888;">{{ member.email }}</div>
                 </div>
             </div>
             {% endfor %}
         </div>
 
-        <!-- [기능 3] 비는 시간 입력 UI 개선 (24시간제 Select Box) -->
+        <!-- 시간 입력 폼 -->
         <div class="free-time-form">
             <h4 style="margin: 0 0 10px 0; font-size: 1.1rem; color: #2e7d32; border-bottom: 2px solid #a5d6a7; padding-bottom: 5px;">
                 <i class="far fa-clock"></i> I'm Free!
@@ -86,31 +90,25 @@
                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
                 </div>
 
-                <label class="form-label">시작 시간 (24h)</label>
+                <label class="form-label">시작 시간</label>
                 <div class="time-select-row">
                     <select name="start_hour" class="time-select" required>
-                        {% for h in range(0, 24) %}
-                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>
-                        {% endfor %}
+                        {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
                     </select>
                     :
                     <select name="start_min" class="time-select" required>
-                        <option value="00">00분</option>
-                        <option value="30">30분</option>
+                        <option value="00">00분</option><option value="30">30분</option>
                     </select>
                 </div>
 
-                <label class="form-label">종료 시간 (24h)</label>
+                <label class="form-label">종료 시간</label>
                 <div class="time-select-row">
                     <select name="end_hour" class="time-select" required>
-                        {% for h in range(0, 24) %}
-                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>
-                        {% endfor %}
+                        {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
                     </select>
                     :
                     <select name="end_min" class="time-select" required>
-                        <option value="00">00분</option>
-                        <option value="30">30분</option>
+                        <option value="00">00분</option><option value="30">30분</option>
                     </select>
                 </div>
 
@@ -119,7 +117,6 @@
                 </button>
             </form>
         </div>
-
         <div style="margin-top: 15px;">
             <a href="/" class="btn-outline" style="display: block; text-align: center; color: #666; text-decoration: none;">
                 <i class="fas fa-arrow-left"></i> 대시보드로
@@ -143,32 +140,40 @@
 
             {% for i in range(1, days_in_month + 1) %}
                 {% set day_key = '%04d-%02d-%02d' % (year, month, i) %}
-                
+
                 <div class="cal-cell">
                     <div class="date-num">{{ i }}</div>
-                    
-                    <!-- [기능 4] 계산된 시간 출력 (모두가 되는 시간) -->
+
+                    <!-- 1. 모두 가능한 시간 (가장 위에 표시) -->
                     {% for slot in common_slots %}
                         {% if slot.start.strftime('%Y-%m-%d') == day_key %}
-                            <div class="chip-common">
-                                <i class="fas fa-star" style="color: yellow;"></i> 
+                            <div class="chip chip-common">
+                                <i class="fas fa-star" style="color: yellow; margin-right:3px;"></i>
                                 {{ slot.start.strftime('%H:%M') }} - {{ slot.end.strftime('%H:%M') }}
                             </div>
                         {% endif %}
                     {% endfor %}
 
-                    <!-- 내 비는 시간 표시 (참고용) -->
-                    {% for slot in my_slots %}
+                    <!-- 2. 개별 멤버 시간 (전체 출력) -->
+                    {% for slot in group_slots %}
                         {% if slot.start_time.strftime('%Y-%m-%d') == day_key %}
-                            <div class="chip-mine">
-                                {{ slot.start_time.strftime('%H:%M') }} (나)
-                            </div>
+                            {% if slot.username == current_user.username %}
+                                <!-- 내 일정 -->
+                                <div class="chip chip-mine">
+                                    {{ slot.start_time.strftime('%H:%M') }} (나)
+                                </div>
+                            {% else %}
+                                <!-- 다른 사람 일정 -->
+                                <div class="chip chip-other">
+                                    {{ slot.start_time.strftime('%H:%M') }} ({{ slot.username }})
+                                </div>
+                            {% endif %}
                         {% endif %}
                     {% endfor %}
 
                 </div>
             {% endfor %}
-            
+
             <!-- 빈 칸 채우기 -->
             {% set start_blank_count = (calendar.monthrange(year, month)[0] + 1) % 7 %}
             {% set total_cells = start_blank_count + days_in_month %}
@@ -178,10 +183,17 @@
                 {% endfor %}
             {% endif %}
         </div>
-        
-        <div style="margin-top: 20px; text-align: right; font-size: 0.9rem; color: #666;">
-            <span style="display:inline-block; width: 10px; height: 10px; background: #4a90e2; margin-right: 5px;"></span> 모두 가능한 시간
-            <span style="display:inline-block; width: 10px; height: 10px; background: #a5d6a7; margin-left: 10px; margin-right: 5px;"></span> 내가 등록한 시간
+
+        <div style="margin-top: 20px; text-align: right; font-size: 0.8rem; color: #666; display: flex; justify-content: flex-end; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 10px; height: 10px; background: #2979ff;"></div> 모두 가능
+            </div>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 10px; height: 10px; background: #a5d6a7;"></div> 나
+            </div>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 10px; height: 10px; background: #eeeeee; border: 1px solid #ccc;"></div> 멤버들
+            </div>
         </div>
     </main>
 </div>

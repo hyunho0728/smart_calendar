@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 
 {% block header_content %}
-<!-- 헤더 전체 컨테이너 -->
-<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+<!-- 헤더 전체 컨테이너: 좌-중-우 3단 배치 (Relative Position) -->
+<div style="position: relative; display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 0;">
 
-    <!-- [왼쪽] 날씨 및 정보 -->
+    <!-- [1. 좌측] 날씨 정보 및 말풍선 -->
     <div style="display: flex; align-items: center;">
         <div style="display: flex; align-items: center; gap: 15px;">
             <div style="text-align: center;">
                 <i class="fas {{ info.weather.icon }} fa-2x" style="color: #fbc02d;"></i>
             </div>
             <div>
-                <div style="font-size: 1.5rem; font-weight: 900; color: #333;">
+                <div style="font-size: 1.5rem; font-weight: 900; color: #333; line-height: 1;">
                     {{ info.weather.temp }}
                 </div>
-                <div style="font-size: 0.9rem; color: #666; display: flex; align-items: center; gap: 5px;">
+                <div style="font-size: 0.85rem; color: #666; display: flex; align-items: center; gap: 5px; margin-top: 3px;">
                      <span>{{ info.weather.status }}</span>
                      <span style="width: 1px; height: 10px; background: #ccc;"></span>
                      <span>{{ info.time_now }}</span>
@@ -22,58 +22,49 @@
             </div>
         </div>
 
-        <div style="margin-left: 20px; background: #e3f2fd; padding: 8px 15px; border-radius: 20px 20px 20px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); max-width: 300px;">
-            <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive;">
+        <!-- 파란색 말풍선 -->
+        <div style="margin-left: 20px; background: #e3f2fd; padding: 6px 15px; border-radius: 20px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center;">
+            <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive; white-space: nowrap;">
                 <i class="fas fa-robot" style="margin-right: 5px;"></i>
                 오늘 날씨 정보가 업데이트 되었습니다!
             </p>
         </div>
     </div>
 
-    <!-- [오른쪽] 네비게이션 아이콘 + 프로필 아바타 -->
-    <div style="display: flex; align-items: center; gap: 25px;">
-
-        <!-- 1. 네비게이션 아이콘들 -->
-        <div style="display: flex; align-items: center; gap: 18px; font-size: 1.2rem;">
-            <!-- 설정 -->
-            <i class="fas fa-cog" style="color: #555; cursor: pointer;" title="설정"></i>
-
-            <!-- 홈 -->
-            <a href="/" style="color: #555; text-decoration: none;" title="대시보드">
-                <i class="fas fa-home"></i>
+    <!-- [2. 중앙] 프로필 정보 (정중앙 고정) -->
+    <div style="position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;">
+        <!-- 이름 및 로그아웃 -->
+        <div style="text-align: right;">
+            <div style="font-weight: bold; font-size: 1rem; color: #333; line-height: 1.2;">
+                {{ current_user.username }}
+            </div>
+            <a href="{{ url_for('logout') }}" style="font-size: 0.8rem; color: #ff5252; text-decoration: none; display: inline-block;">
+                로그아웃
             </a>
-
-            <!-- 캘린더 -->
-            <a href="/calendar" style="color: #555; text-decoration: none;" title="캘린더">
-                <i class="fas fa-calendar-alt"></i>
-            </a>
-
-            <!-- 공유 캘린더 참가 (회색) -->
-            <i class="fas fa-users" onclick="openJoinModal()" title="공유 캘린더 참가" style="color: #999; cursor: pointer;"></i>
-
-            <!-- 검색 -->
-            <i class="fas fa-search" style="color: #555; cursor: pointer;" title="검색"></i>
         </div>
 
-        <!-- 구분선 -->
-        <div style="width: 1px; height: 24px; background: #e0e0e0;"></div>
-
-        <!-- 2. [요청하신] 프로필 아바타 영역 -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="text-align: right;">
-                <div style="font-weight: bold; font-size: 0.9rem; color: #333;">
-                    {{ current_user.username }}
-                </div>
-                <a href="{{ url_for('logout') }}" style="font-size: 0.75rem; color: #ff5252; text-decoration: none; display: block;">
-                    로그아웃
-                </a>
-            </div>
-            <!-- 프로필 사진 (아바타) -->
-            <div style="width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                {{ current_user.username[0] | upper }}
-            </div>
+        <!-- 보라색 원형 아바타 -->
+        <div style="width: 45px; height: 45px; border-radius: 50%; background: #673ab7; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.4rem; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            {{ current_user.username[0] | upper }}
         </div>
+    </div>
 
+    <!-- [3. 우측] 아이콘 메뉴 (flex-end로 우측 끝에 붙임) -->
+    <div class="nav-icons" style="display: flex; align-items: center; justify-content: flex-end; flex: 1;">
+        <!-- 설정 -->
+        <i class="fas fa-cog" title="설정"></i>
+
+        <!-- 홈 -->
+        <a href="/"><i class="fas fa-home" title="홈"></i></a>
+
+        <!-- 캘린더 -->
+        <a href="/calendar"><i class="far fa-calendar-alt" title="캘린더"></i></a>
+
+        <!-- 공유 캘린더 참가 (이미지에 있는 아이콘) -->
+        <i class="fas fa-users" onclick="openJoinModal()" title="공유 캘린더 참가" style="color: #888;"></i>
+
+        <!-- 검색 -->
+        <i class="fas fa-search" title="검색"></i>
     </div>
 
 </div>
@@ -292,9 +283,11 @@
             });
         }
 
+        // 초기 실행
         loadPlace(false);
         loadActivity(false);
 
+        // 버튼 이벤트 리스너
         document.getElementById('refresh-place-btn').addEventListener('click', function() {
             loadPlace(true);
         });

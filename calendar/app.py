@@ -230,7 +230,7 @@ def InitilizeDB():
                 conn.commit()
 
         conn.commit()
-        print("✅ 데이터베이스 초기화 완료 (테이블명 수정됨: cal_groups)")
+        print("✅ 데이터베이스 초기화 완료")
     except Exception as e:
         print(f"⚠️ DB 초기화 오류 : {e}")
     finally:
@@ -353,13 +353,13 @@ def create_group_calendar():
         conn.close()
 
 
-# [추가됨] 1.5 공유 캘린더 참가 (초대 코드 입력)
+# 1.5 공유 캘린더 참가 (초대 코드 입력)
 @app.route('/join_group', methods=['POST'])
 @login_required
 def join_group():
     invite_input = request.form.get('invite_code', '').strip()
 
-    # URL에서 코드만 추출 (만약 전체 링크를 넣었을 경우)
+    # URL에서 코드만 추출
     if '/shared/' in invite_input:
         invite_code = invite_input.split('/shared/')[-1]
     else:
@@ -379,13 +379,14 @@ def shared_calendar(invite_code):
     conn = get_db_connection()
     group_info = None
     members = []
-    my_slots = []
+    group_slots = []
     common_slots = []
 
     try:
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
 
+            # 1. 그룹 정보 조회
             cursor.execute("SELECT * FROM cal_groups WHERE invite_code = %s", (invite_code,))
             group_info = cursor.fetchone()
 
@@ -395,7 +396,7 @@ def shared_calendar(invite_code):
 
             group_id = group_info['group_id']
 
-            # 내가 멤버가 아니면 자동으로 가입
+            # 2. 자동 가입 처리
             cursor.execute("SELECT * FROM group_members WHERE group_id=%s AND user_id=%s", (group_id, current_user.id))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO group_members (group_id, user_id) VALUES (%s, %s)",
@@ -403,61 +404,50 @@ def shared_calendar(invite_code):
                 conn.commit()
                 flash("공유 캘린더에 참여했습니다!")
 
-            # 멤버 리스트 조회
+            # 3. 멤버 리스트 조회
             cursor.execute("""
-                           SELECT u.username, u.email
+                           SELECT u.user_id, u.username, u.email
                            FROM group_members gm
                                     JOIN users u ON gm.user_id = u.user_id
                            WHERE gm.group_id = %s
                            """, (group_id,))
             members = cursor.fetchall()
 
-            # 나의 비는 시간 조회
+            # 4. 모든 멤버의 슬롯 가져오기
             cursor.execute("""
-                           SELECT start_time, end_time
-                           FROM available_slots
-                           WHERE group_id = %s
-                             AND user_id = %s
-                           """, (group_id, current_user.id))
-            my_slots = cursor.fetchall()
-
-            # --- [핵심] 모두가 비는 시간 계산 로직 ---
-            cursor.execute("""
-                           SELECT user_id, start_time, end_time
-                           FROM available_slots
-                           WHERE group_id = %s
-                           ORDER BY start_time
+                           SELECT s.slot_id, s.user_id, u.username, s.start_time, s.end_time
+                           FROM available_slots s
+                                    JOIN users u ON s.user_id = u.user_id
+                           WHERE s.group_id = %s
+                           ORDER BY s.start_time ASC
                            """, (group_id,))
-            all_slots = cursor.fetchall()
+            group_slots = cursor.fetchall()
 
+            # --- [핵심] 모두가 비는 시간 계산 (교집합) ---
             member_count = len(members)
-            if member_count > 0 and all_slots:
-                member_availability = {m['username']: set() for m in members}
-
-                for slot in all_slots:
-                    u_name = next(
-                        (m['username'] for m in members if m['email'] == get_email_by_id(conn, slot['user_id'])), None)
-                    if not u_name: continue
-
+            if member_count > 1 and group_slots:
+                time_counter = {}
+                for slot in group_slots:
                     curr = slot['start_time']
                     while curr < slot['end_time']:
-                        member_availability[u_name].add(curr)
+                        if curr not in time_counter:
+                            time_counter[curr] = set()
+                        time_counter[curr].add(slot['user_id'])
                         curr += timedelta(minutes=30)
 
-                if member_availability:
-                    common_times_set = set.intersection(*member_availability.values())
-                    sorted_times = sorted(list(common_times_set))
-                    if sorted_times:
-                        temp_start = sorted_times[0]
-                        temp_curr = temp_start
-                        for i in range(1, len(sorted_times)):
-                            if sorted_times[i] == temp_curr + timedelta(minutes=30):
-                                temp_curr = sorted_times[i]
-                            else:
-                                common_slots.append({'start': temp_start, 'end': temp_curr + timedelta(minutes=30)})
-                                temp_start = sorted_times[i]
-                                temp_curr = temp_start
-                        common_slots.append({'start': temp_start, 'end': temp_curr + timedelta(minutes=30)})
+                common_times = sorted([t for t, users in time_counter.items() if len(users) == member_count])
+
+                if common_times:
+                    start = common_times[0]
+                    end = start + timedelta(minutes=30)
+                    for i in range(1, len(common_times)):
+                        if common_times[i] == end:
+                            end += timedelta(minutes=30)
+                        else:
+                            common_slots.append({'start': start, 'end': end})
+                            start = common_times[i]
+                            end = start + timedelta(minutes=30)
+                    common_slots.append({'start': start, 'end': end})
 
     except Exception as e:
         print(f"Shared Calendar Error: {e}")
@@ -473,7 +463,7 @@ def shared_calendar(invite_code):
                            group=group_info,
                            members=members,
                            invite_code=invite_code,
-                           my_slots=my_slots,
+                           group_slots=group_slots,
                            common_slots=common_slots,
                            year=year, month=month, days_in_month=days_in_month,
                            calendar=calendar)
@@ -486,7 +476,7 @@ def get_email_by_id(conn, uid):
         return res['email'] if res else None
 
 
-# 3. 비는 시간 추가 (24시간제 UI 지원을 위해 입력 처리 로직 수정)
+# 3. 비는 시간 추가
 @app.route('/add_free_time', methods=['POST'])
 @login_required
 def add_free_time():
@@ -494,7 +484,6 @@ def add_free_time():
     invite_code = request.form.get('invite_code')
     date_str = request.form.get('date')
 
-    # 24시간제 Select Box에서 값 받아오기
     start_hour = request.form.get('start_hour')
     start_min = request.form.get('start_min')
     end_hour = request.form.get('end_hour')
@@ -502,14 +491,12 @@ def add_free_time():
 
     conn = get_db_connection()
     try:
-        # 시간 문자열 조립 (HH:MM)
         start_time_str = f"{start_hour}:{start_min}"
         end_time_str = f"{end_hour}:{end_min}"
 
         start_dt = datetime.strptime(f"{date_str} {start_time_str}", "%Y-%m-%d %H:%M")
         end_dt = datetime.strptime(f"{date_str} {end_time_str}", "%Y-%m-%d %H:%M")
 
-        # 종료 시간이 시작 시간보다 빠르면 무시
         if end_dt <= start_dt:
             flash("종료 시간은 시작 시간보다 늦어야 합니다.")
             return redirect(url_for('shared_calendar', invite_code=invite_code))
@@ -531,7 +518,7 @@ def add_free_time():
 
 
 # ---------------------------------------------------------
-# 기존 라우트 및 설정
+# [기존 라우트 및 Gemini AI 설정 (복구됨)]
 # ---------------------------------------------------------
 
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
@@ -548,6 +535,7 @@ place_cache = {"data": None}
 activity_cache = {"data": None}
 
 
+# DB 헬퍼 함수
 def fetch_events_from_db(user_id):
     conn = get_db_connection()
     events_dict = {}
@@ -611,52 +599,132 @@ def get_real_weather(city="Anseong"):
         return {"temp": "--°C", "status": "연결실패", "icon": "fa-exclamation-triangle"}
 
 
+# [복구됨] OOTD 추천 로직
 def get_gemini_ootd_text(weather_data):
     try:
-        prompt = f"날씨 {weather_data['status']}, 기온 {weather_data['temp']}. OOTD 추천 20자 내외."
+        prompt = f"""
+        현재 날씨는 {weather_data['status']}이고 기온은 {weather_data['temp']}입니다.
+        이 날씨에 맞는 패션 스타일(OOTD)을 추천해주세요.
+        구체적인 아이템(상의, 하의, 아우터, 신발 등)을 언급하며 20자 내외의 한 문장으로 작성해주세요.
+        말투는 친절하게, 이모지를 꼭 포함해주세요.
+        """
         response = model.generate_content(prompt)
         return response.text
-    except:
+    except Exception as e:
+        print(f"OOTD Error: {e}")
         return "날씨에 딱 맞는 따뜻한 코디를 추천해요! 🧥"
 
 
+# [복구됨] 장소 추천 로직
 def get_gemini_place_recommendation(city="안성"):
     try:
-        prompt = f"경기도 {city} 맛집/카페 추천 JSON 포맷: {{'name':.., 'tags':[], 'menu':..}}"
+        prompt = f"""
+        경기도 {city}에 있는 실제 맛집이나 감성 카페 중 하나를 랜덤으로 추천해줘.
+        반드시 아래 JSON 형식으로만 답변해줘 (마크다운 backtick 없이 순수 JSON만):
+        {{
+            "name": "가게이름",
+            "tags": ["태그1", "태그2", "태그3"],
+            "menu": "대표메뉴 1~2개"
+        }}
+        """
         response = model.generate_content(prompt)
         text = response.text.replace('```json', '').replace('```', '').strip()
         return json.loads(text)
-    except:
-        return {"name": "추천 맛집", "tags": ["맛집"], "menu": "맛있는 메뉴"}
+    except Exception as e:
+        print(f"Place Error: {e}")
+        return {
+            "name": "안성 맞춤 맛집",
+            "tags": ["분위기좋은", "맛집탐방", "추천"],
+            "menu": "맛있는 한 끼"
+        }
 
 
+# [복구됨] 활동 추천 로직
 def get_gemini_activity_recommendation(weather_data, today_schedule):
     try:
-        # 간단화된 프롬프트
-        prompt = f"날씨 {weather_data['status']}에 맞는 자투리 시간 활동 2개 추천 JSON 리스트 포맷."
+        schedule_text = "오늘의 일정:\n"
+        if not today_schedule:
+            schedule_text += "일정이 없습니다. 하루 종일 자유시간입니다."
+        else:
+            for event in today_schedule:
+                time = event.get('time', '시간미정')
+                title = event.get('title', '일정')
+                schedule_text += f"- {time} {title}\n"
+
+        prompt = f"""
+        현재 날씨: {weather_data['status']}, 기온: {weather_data['temp']}
+        {schedule_text}
+
+        위의 날씨와 오늘의 일정을 고려해서, 일정이 없는 '자투리 시간(Free Time)'에 할 수 있는 알차고 힐링되는 활동 2가지를 추천해줘.
+        반드시 아래 JSON 리스트 형식으로만 답변해줘 (마크다운 없이):
+        [
+            {{ "title": "활동명1", "desc": "간단한 설명(10자 내외)" }},
+            {{ "title": "활동명2", "desc": "간단한 설명(10자 내외)" }}
+        ]
+        """
         response = model.generate_content(prompt)
         text = response.text.replace('```json', '').replace('```', '').strip()
         return json.loads(text)
-    except:
-        return [{"title": "휴식", "desc": "잠시 쉬어가세요"}]
+    except Exception as e:
+        print(f"Activity Error: {e}")
+        return [
+            {"title": "독서하기", "desc": "조용한 카페에서 힐링"},
+            {"title": "스트레칭", "desc": "가벼운 운동으로 활력 충전"}
+        ]
 
 
+# [복구됨] API 라우트
 @app.route('/api/get_ootd', methods=['POST'])
 def api_get_ootd():
+    global ootd_cache
     data = request.get_json()
-    return jsonify({"text": get_gemini_ootd_text(data)})
+    current_key = f"{data.get('status')}_{data.get('temp')}"
+
+    if ootd_cache["weather_key"] == current_key and ootd_cache["text"]:
+        return jsonify({"text": ootd_cache["text"]})
+
+    ootd_text = get_gemini_ootd_text(data)
+    ootd_cache["weather_key"] = current_key
+    ootd_cache["text"] = ootd_text
+    return jsonify({"text": ootd_text})
 
 
 @app.route('/api/get_place', methods=['POST'])
 def api_get_place():
-    return jsonify(get_gemini_place_recommendation("안성"))
+    global place_cache
+    req_data = request.get_json() or {}
+    force_refresh = req_data.get('refresh', False)
+
+    if place_cache['data'] and not force_refresh:
+        return jsonify(place_cache['data'])
+
+    place_data = get_gemini_place_recommendation("안성")
+    place_cache['data'] = place_data
+    return jsonify(place_data)
 
 
 @app.route('/api/get_activity', methods=['POST'])
 @login_required
 def api_get_activity():
-    # ... (기존 로직 유지)
-    return jsonify(get_gemini_activity_recommendation({}, []))
+    global activity_cache
+    req_data = request.get_json() or {}
+    force_refresh = req_data.get('refresh', False)
+
+    weather_data = {
+        "status": req_data.get('status', ''),
+        "temp": req_data.get('temp', '')
+    }
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    all_events = fetch_events_from_db(user_id=current_user.id)
+    today_schedule = all_events.get(today_str, [])
+
+    if activity_cache['data'] and not force_refresh:
+        return jsonify(activity_cache['data'])
+
+    activity_data = get_gemini_activity_recommendation(weather_data, today_schedule)
+    activity_cache['data'] = activity_data
+    return jsonify(activity_data)
 
 
 @app.route('/')
@@ -734,6 +802,7 @@ def add_event():
     minute = request.form.get('minute')
     if date and title: insert_event_to_db(current_user.id, title, date, hour, minute)
     return redirect(url_for('calendar_page', year=int(date.split('-')[0]), month=int(date.split('-')[1])))
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
