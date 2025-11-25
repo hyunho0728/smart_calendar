@@ -6,9 +6,53 @@ import google.generativeai as genai
 import json
 from dotenv import load_dotenv
 import os
+import pymysql
 
+#.env 파일 내용 로드
 load_dotenv()
 
+def InitilizeDB():
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("create database if not exists cal_db")
+            cursor.execute("use cal_db")
+            cursor.execute("""
+                           CREATE TABLE IF NOT EXISTS users 
+                           (
+                                user_id INT AUTO_INCREMENT PRIMARY KEY,  -- 고유 ID (자동 증가)
+                                username VARCHAR(50) NOT NULL,           -- 사용자 이름
+                                email VARCHAR(100) NOT NULL UNIQUE,      -- 이메일 (중복 불가)
+                                password_hash VARCHAR(255) NOT NULL,     -- 비밀번호 (암호화하여 저장 권장)
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- 계정 생성일
+                            );""")
+            cursor.execute("""CREATE TABLE IF NOT EXISTS schedules
+                              (
+                                  schedule_id INT AUTO_INCREMENT PRIMARY KEY,       -- 일정 고유 ID
+                                  user_id     INT          NOT NULL,                -- 어떤 유저의 일정인지 (외래 키)
+                                  title       VARCHAR(150) NOT NULL,                -- 일정 제목
+                                  description TEXT,                                 -- 일정 상세 내용 (긴 글 가능)
+                                  start_date  DATETIME     NOT NULL,                -- 시작 시간 (년-월-일 시:분:초)
+                                  end_date    DATETIME     NOT NULL,                -- 종료 시간
+                                  color       VARCHAR(7) DEFAULT '#3788d8',         -- 캘린더 표시 색상 (Hex 코드)
+                                  created_at  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP, -- 일정 생성일
+                              );""")
+            cursor.execute("CONSTRAINT fk_user_schedule")
+            cursor.execute("FOREIGN KEY (user_id) REFERENCES users(user_id)")
+            cursor.execute("ON DELETE CASCADE")
+
+    except Exception as e:
+        print(f"오류 : {e}")
+
+# db 연결
+conn = pymysql.connect(
+    host="127.0.0.1",
+    user="root",
+    passwd=f"{os.environ.get("DB_PASSWORD")}",
+    charset="utf8"
+)
+
+# db 기초값 생성
+InitilizeDB()
 app = Flask(__name__)
 
 # ---------------------------------------------------------

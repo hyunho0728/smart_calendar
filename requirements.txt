@@ -2,9 +2,11 @@ annotated-types==0.7.0
 blinker==1.9.0
 cachetools==6.2.2
 certifi==2025.11.12
+cffi==2.0.0
 charset-normalizer==3.4.4
 click==8.3.1
 colorama==0.4.6
+cryptography==46.0.3
 Flask==3.1.2
 google-ai-generativelanguage==0.6.15
 google-api-core==2.25.2
@@ -24,8 +26,10 @@ proto-plus==1.26.1
 protobuf==5.29.5
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
+pycparser==2.23
 pydantic==2.12.4
 pydantic_core==2.41.5
+PyMySQL==1.1.2
 pyparsing==3.2.5
 python-dotenv==1.2.1
 requests==2.32.5
