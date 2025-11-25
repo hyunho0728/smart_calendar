@@ -1,12 +1,10 @@
 {% extends "base.html" %}
 
 {% block header_content %}
-<!-- [수정됨] 전체 헤더를 flex 컨테이너로 감싸서 배치 정렬 -->
 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 
     <!-- 왼쪽: 날씨 및 코멘트 -->
     <div style="display: flex; align-items: center;">
-        <!-- 날씨 위젯 -->
         <div style="display: flex; align-items: center; gap: 15px;">
             <div style="text-align: center;">
                 <i class="fas {{ info.weather.icon }} fa-2x" style="color: #fbc02d;"></i>
@@ -23,7 +21,6 @@
             </div>
         </div>
 
-        <!-- 상단 한줄 코멘트 -->
         <div style="margin-left: 20px; background: #e3f2fd; padding: 8px 15px; border-radius: 20px 20px 20px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); max-width: 300px;">
             <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive;">
                 <i class="fas fa-robot" style="margin-right: 5px;"></i>
@@ -32,9 +29,15 @@
         </div>
     </div>
 
-    <!-- [추가됨] 오른쪽: 유저 프로필 및 로그아웃 -->
-    <div style="display: flex; align-items: center; gap: 15px;">
-        <div style="text-align: right;">
+    <!-- [수정됨] 오른쪽: 버튼 아이콘 그룹 및 프로필 -->
+    <div style="display: flex; align-items: center; gap: 20px;">
+
+        <!-- 공유 캘린더 참가 버튼 (아이콘) -->
+        <button onclick="openJoinModal()" title="공유 캘린더 참가하기" style="background:none; border:none; cursor:pointer; color:#4a90e2; font-size: 1.5rem;">
+            <i class="fas fa-calendar-check"></i>
+        </button>
+
+        <div style="text-align: right; border-left: 1px solid #ddd; padding-left: 20px;">
             <span style="display: block; font-weight: bold; color: #333; font-size: 0.95rem;">
                 {{ current_user.username }}님
             </span>
@@ -56,7 +59,6 @@
 </div>
 
 <div class="dashboard-grid">
-    <!-- [왼쪽 컬럼] OOTD -->
     <div class="col-left">
         <div class="card tape-top" style="min-height: 250px; display: flex; flex-direction: column;">
             <h3>Suggestions - OOTD</h3>
@@ -69,7 +71,6 @@
         </div>
     </div>
 
-    <!-- [중앙 컬럼] 스케줄 & 추천 장소 -->
     <div class="col-center">
         <div class="card tape-top">
             <h3>My Schedule</h3>
@@ -94,7 +95,6 @@
             </ul>
         </div>
 
-        <!-- 추천 장소 -->
         <div class="card" style="margin-top: 20px; border-left: 5px solid #ffcc80;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <h3 style="margin: 0;">📍 Recommended Place</h3>
@@ -117,10 +117,8 @@
         </div>
     </div>
 
-    <!-- [오른쪽 컬럼] AI 추천 활동 -->
     <div class="col-right">
         <div class="card" style="border-top: 8px dotted #aaa;">
-            <!-- [수정됨] 버튼 추가 -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <h3 style="margin: 0;">💡 AI Recommendation</h3>
                 <button id="refresh-activity-btn" class="btn-outline" style="border: none; background: transparent; cursor: pointer; color: #888; font-size: 1rem;" title="다른 활동 추천">
@@ -130,19 +128,12 @@
 
             <p class="small" style="color: #555;">&lt;Free time 활용&gt;</p>
 
-            <!-- 동적 로딩 영역 -->
             <div id="activity-container">
                 <p id="activity-loading" style="text-align:center; color:#888; margin: 20px 0;">
                     <i class="fas fa-spinner fa-spin"></i> 추천 활동을 찾는 중...
                 </p>
                 <ul id="activity-list" style="padding-left: 20px; line-height: 1.8; display: none;">
-                    <!-- 자바스크립트로 채워짐 -->
                 </ul>
-            </div>
-
-            <div style="text-align: center; margin-top: 20px;">
-                <!-- 이 버튼은 장식용으로 남겨두거나 삭제 가능 -->
-                <button class="btn-outline" onclick="alert('더 많은 기능 준비중!')">다른 활동 보기</button>
             </div>
         </div>
     </div>
@@ -154,12 +145,48 @@
     </a>
 </div>
 
+<!-- 하단에 그룹 생성 버튼 -->
+<div style="position: fixed; bottom: 80px; right: 30px;">
+    <a href="/create_group_calendar" class="btn-add" style="display:inline-block; text-decoration:none; background: #ff7043; box-shadow: 2px 2px 10px rgba(0,0,0,0.3);">
+        <i class="fas fa-users"></i> Make Group
+    </a>
+</div>
+
+<!-- [추가됨] 공유 캘린더 참가 모달 -->
+<div id="joinModal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); align-items: center; justify-content: center;">
+    <div style="background-color: #fff; padding: 30px; border-radius: 15px; width: 350px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative;">
+        <span onclick="closeJoinModal()" style="position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; color: #aaa;">&times;</span>
+
+        <h2 style="color: #333; margin-bottom: 20px;"><i class="fas fa-envelope-open-text"></i> Join Calendar</h2>
+
+        <p style="color: #666; font-size: 0.9rem; margin-bottom: 20px;">
+            친구에게 받은 초대 코드<br>또는 링크를 입력하세요.
+        </p>
+
+        <form action="{{ url_for('join_group') }}" method="POST">
+            <input type="text" name="invite_code" placeholder="초대 코드 / 링크 붙여넣기" required
+                   style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 20px; font-size: 1rem;">
+
+            <button type="submit" style="width: 100%; padding: 12px; background: #4a90e2; color: white; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; font-weight: bold;">
+                입장하기
+            </button>
+        </form>
+    </div>
+</div>
+
 <script>
+    function openJoinModal() {
+        const modal = document.getElementById('joinModal');
+        modal.style.display = "flex";
+    }
+    function closeJoinModal() {
+        document.getElementById('joinModal').style.display = "none";
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const weatherStatus = "{{ info.weather.status }}";
         const weatherTemp = "{{ info.weather.temp }}";
 
-        // 1. OOTD
         fetch('/api/get_ootd', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -172,7 +199,6 @@
             `;
         });
 
-        // 2. 장소 추천
         function loadPlace(refresh = false) {
             if (refresh) {
                 document.getElementById('place-name').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 새로운 장소를 찾는 중...';
@@ -204,7 +230,6 @@
             });
         }
 
-        // 3. [추가됨] 활동 추천 함수
         function loadActivity(refresh = false) {
             const container = document.getElementById('activity-container');
             const list = document.getElementById('activity-list');
@@ -241,11 +266,9 @@
             });
         }
 
-        // 초기 실행
         loadPlace(false);
         loadActivity(false);
 
-        // 버튼 이벤트 리스너
         document.getElementById('refresh-place-btn').addEventListener('click', function() {
             loadPlace(true);
         });

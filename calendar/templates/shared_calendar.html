@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* 공유 캘린더 전용 스타일 */
+    .invite-btn {
+        width: 50px; height: 50px; border-radius: 50%;
+        background: #ff5252; color: white; border: none;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; cursor: pointer; transition: transform 0.2s;
+        position: absolute; top: 20px; left: 20px; z-index: 10;
+    }
+    .invite-btn:hover { transform: scale(1.1); background: #ff1744; }
+    
+    .member-list-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 0; border-bottom: 1px dashed #eee;
+    }
+    .member-avatar {
+        width: 30px; height: 30px; border-radius: 50%;
+        background: #4a90e2; color: white;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; font-size: 0.8rem;
+    }
+
+    /* 하단 비는 시간 입력 폼 스타일 개선 */
+    .free-time-form {
+        margin-top: 20px; padding: 20px; background: #fff;
+        border-radius: 12px; border: 1px solid #e0e0e0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .form-label {
+        font-size: 0.85rem; font-weight: bold; color: #555;
+        margin-bottom: 5px; display: block;
+    }
+    .time-select-row {
+        display: flex; align-items: center; gap: 5px; margin-bottom: 10px;
+    }
+    .time-select {
+        flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px;
+        background: #fff; font-size: 0.9rem; text-align: center;
+    }
+
+    /* 칩 스타일 */
+    .chip-common { background: #4a90e2; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-bottom: 2px; display: block;}
+    .chip-mine { background: #a5d6a7; color: #1b5e20; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-bottom: 2px; display: block;}
+</style>
+
+<div class="calendar-layout" style="position: relative;">
+    <!-- [기능 1] 좌상단 초대 버튼 (링크 복사) -->
+    <button class="invite-btn" onclick="copyInviteLink()" title="초대 링크 복사">
+        <i class="fas fa-link"></i>
+    </button>
+
+    <aside class="sidebar card" style="padding-top: 60px;"> <!-- 버튼 공간 확보 -->
+        <h3 style="border-bottom: 2px solid #333; padding-bottom: 10px;">
+            <i class="fas fa-users"></i> Members
+        </h3>
+
+        <div id="member-list" style="margin-bottom: 20px;">
+            {% for member in members %}
+            <div class="member-list-item">
+                <div class="member-avatar">{{ member.username[0] | upper }}</div>
+                <div>
+                    <div style="font-weight: bold; font-size: 0.9rem;">{{ member.username }}</div>
+                    <div style="font-size: 0.7rem; color: #888;">{{ member.email }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- [기능 3] 비는 시간 입력 UI 개선 (24시간제 Select Box) -->
+        <div class="free-time-form">
+            <h4 style="margin: 0 0 10px 0; font-size: 1.1rem; color: #2e7d32; border-bottom: 2px solid #a5d6a7; padding-bottom: 5px;">
+                <i class="far fa-clock"></i> I'm Free!
+            </h4>
+
+            <form action="{{ url_for('add_free_time') }}" method="POST">
+                <input type="hidden" name="group_id" value="{{ group.group_id }}">
+                <input type="hidden" name="invite_code" value="{{ invite_code }}">
+
+                <div style="margin-bottom: 15px;">
+                    <label class="form-label">날짜 선택</label>
+                    <input type="date" name="date" required
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+
+                <label class="form-label">시작 시간 (24h)</label>
+                <div class="time-select-row">
+                    <select name="start_hour" class="time-select" required>
+                        {% for h in range(0, 24) %}
+                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>
+                        {% endfor %}
+                    </select>
+                    :
+                    <select name="start_min" class="time-select" required>
+                        <option value="00">00분</option>
+                        <option value="30">30분</option>
+                    </select>
+                </div>
+
+                <label class="form-label">종료 시간 (24h)</label>
+                <div class="time-select-row">
+                    <select name="end_hour" class="time-select" required>
+                        {% for h in range(0, 24) %}
+                        <option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>
+                        {% endfor %}
+                    </select>
+                    :
+                    <select name="end_min" class="time-select" required>
+                        <option value="00">00분</option>
+                        <option value="30">30분</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-add" style="width: 100%; margin-top: 5px; background: #66bb6a; border-color: #66bb6a; padding: 10px;">
+                    시간 등록
+                </button>
+            </form>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <a href="/" class="btn-outline" style="display: block; text-align: center; color: #666; text-decoration: none;">
+                <i class="fas fa-arrow-left"></i> 대시보드로
+            </a>
+        </div>
+    </aside>
+
+    <main class="main-cal">
+        <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
+            <h1 style="font-family: 'Noto Sans KR'; font-weight: 900; font-size: 1.8rem; color: #2c3e50; margin: 0 20px;">
+                <span style="font-size: 1rem; color: #888; display: block; text-align: center;">GROUP CALENDAR</span>
+                {{ month }}월 {{ year }}
+            </h1>
+        </div>
+
+        <div class="cal-grid">
+            <div class="cal-head" style="color: #e74c3c;">SUN</div>
+            <div class="cal-head">MON</div><div class="cal-head">TUE</div><div class="cal-head">WED</div>
+            <div class="cal-head">THU</div><div class="cal-head">FRI</div>
+            <div class="cal-head" style="color: #3498db;">SAT</div>
+
+            {% for i in range(1, days_in_month + 1) %}
+                {% set day_key = '%04d-%02d-%02d' % (year, month, i) %}
+                
+                <div class="cal-cell">
+                    <div class="date-num">{{ i }}</div>
+                    
+                    <!-- [기능 4] 계산된 시간 출력 (모두가 되는 시간) -->
+                    {% for slot in common_slots %}
+                        {% if slot.start.strftime('%Y-%m-%d') == day_key %}
+                            <div class="chip-common">
+                                <i class="fas fa-star" style="color: yellow;"></i> 
+                                {{ slot.start.strftime('%H:%M') }} - {{ slot.end.strftime('%H:%M') }}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+
+                    <!-- 내 비는 시간 표시 (참고용) -->
+                    {% for slot in my_slots %}
+                        {% if slot.start_time.strftime('%Y-%m-%d') == day_key %}
+                            <div class="chip-mine">
+                                {{ slot.start_time.strftime('%H:%M') }} (나)
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+
+                </div>
+            {% endfor %}
+            
+            <!-- 빈 칸 채우기 -->
+            {% set start_blank_count = (calendar.monthrange(year, month)[0] + 1) % 7 %}
+            {% set total_cells = start_blank_count + days_in_month %}
+            {% if total_cells % 7 != 0 %}
+                {% for _ in range(7 - (total_cells % 7)) %}
+                    <div class="cal-cell" style="background: #f9f9f9;"></div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        
+        <div style="margin-top: 20px; text-align: right; font-size: 0.9rem; color: #666;">
+            <span style="display:inline-block; width: 10px; height: 10px; background: #4a90e2; margin-right: 5px;"></span> 모두 가능한 시간
+            <span style="display:inline-block; width: 10px; height: 10px; background: #a5d6a7; margin-left: 10px; margin-right: 5px;"></span> 내가 등록한 시간
+        </div>
+    </main>
+</div>
+
+<script>
+    function copyInviteLink() {
+        const url = window.location.href;
+        navigator.clipboard.writeText(url).then(() => {
+            alert("초대 링크가 복사되었습니다! \n친구들에게 공유하세요: " + url);
+        }).catch(err => {
+            console.error('복사 실패', err);
+            alert("링크 복사에 실패했습니다. URL창을 복사해주세요.");
+        });
+    }
+</script>
+{% endblock %}
