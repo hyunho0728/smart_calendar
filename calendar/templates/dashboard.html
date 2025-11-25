@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 
 {% block header_content %}
+<!-- 헤더 전체 컨테이너 -->
 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 
-    <!-- 왼쪽: 날씨 및 코멘트 -->
+    <!-- [왼쪽] 날씨 및 정보 -->
     <div style="display: flex; align-items: center;">
         <div style="display: flex; align-items: center; gap: 15px;">
             <div style="text-align: center;">
@@ -29,25 +30,50 @@
         </div>
     </div>
 
-    <!-- [수정됨] 오른쪽: 버튼 아이콘 그룹 및 프로필 -->
-    <div style="display: flex; align-items: center; gap: 20px;">
+    <!-- [오른쪽] 네비게이션 아이콘 + 프로필 아바타 -->
+    <div style="display: flex; align-items: center; gap: 25px;">
 
-        <!-- 공유 캘린더 참가 버튼 (아이콘) -->
-        <button onclick="openJoinModal()" title="공유 캘린더 참가하기" style="background:none; border:none; cursor:pointer; color:#4a90e2; font-size: 1.5rem;">
-            <i class="fas fa-calendar-check"></i>
-        </button>
+        <!-- 1. 네비게이션 아이콘들 -->
+        <div style="display: flex; align-items: center; gap: 18px; font-size: 1.2rem;">
+            <!-- 설정 -->
+            <i class="fas fa-cog" style="color: #555; cursor: pointer;" title="설정"></i>
 
-        <div style="text-align: right; border-left: 1px solid #ddd; padding-left: 20px;">
-            <span style="display: block; font-weight: bold; color: #333; font-size: 0.95rem;">
-                {{ current_user.username }}님
-            </span>
-            <span style="display: block; font-size: 0.75rem; color: #888;">
-                {{ current_user.email }}
-            </span>
+            <!-- 홈 -->
+            <a href="/" style="color: #555; text-decoration: none;" title="대시보드">
+                <i class="fas fa-home"></i>
+            </a>
+
+            <!-- 캘린더 -->
+            <a href="/calendar" style="color: #555; text-decoration: none;" title="캘린더">
+                <i class="fas fa-calendar-alt"></i>
+            </a>
+
+            <!-- 공유 캘린더 참가 (회색) -->
+            <i class="fas fa-users" onclick="openJoinModal()" title="공유 캘린더 참가" style="color: #999; cursor: pointer;"></i>
+
+            <!-- 검색 -->
+            <i class="fas fa-search" style="color: #555; cursor: pointer;" title="검색"></i>
         </div>
-        <a href="{{ url_for('logout') }}" class="btn-outline" style="text-decoration: none; color: #ff5252; border-color: #ff5252; font-size: 0.85rem; padding: 5px 12px; border-radius: 20px; transition: all 0.2s;">
-            <i class="fas fa-sign-out-alt"></i> 로그아웃
-        </a>
+
+        <!-- 구분선 -->
+        <div style="width: 1px; height: 24px; background: #e0e0e0;"></div>
+
+        <!-- 2. [요청하신] 프로필 아바타 영역 -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="text-align: right;">
+                <div style="font-weight: bold; font-size: 0.9rem; color: #333;">
+                    {{ current_user.username }}
+                </div>
+                <a href="{{ url_for('logout') }}" style="font-size: 0.75rem; color: #ff5252; text-decoration: none; display: block;">
+                    로그아웃
+                </a>
+            </div>
+            <!-- 프로필 사진 (아바타) -->
+            <div style="width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                {{ current_user.username[0] | upper }}
+            </div>
+        </div>
+
     </div>
 
 </div>
@@ -152,7 +178,7 @@
     </a>
 </div>
 
-<!-- [추가됨] 공유 캘린더 참가 모달 -->
+<!-- 공유 캘린더 참가 모달 -->
 <div id="joinModal" style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); align-items: center; justify-content: center;">
     <div style="background-color: #fff; padding: 30px; border-radius: 15px; width: 350px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative;">
         <span onclick="closeJoinModal()" style="position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; color: #aaa;">&times;</span>
