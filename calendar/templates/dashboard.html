@@ -1,29 +1,52 @@
 {% extends "base.html" %}
 
 {% block header_content %}
-<!-- 날씨 위젯 -->
-<div style="display: flex; align-items: center; gap: 15px;">
-    <div style="text-align: center;">
-        <i class="fas {{ info.weather.icon }} fa-2x" style="color: #fbc02d;"></i>
-    </div>
-    <div>
-        <div style="font-size: 1.5rem; font-weight: 900; color: #333;">
-            {{ info.weather.temp }}
-        </div>
-        <div style="font-size: 0.9rem; color: #666; display: flex; align-items: center; gap: 5px;">
-             <span>{{ info.weather.status }}</span>
-             <span style="width: 1px; height: 10px; background: #ccc;"></span>
-             <span>{{ info.time_now }}</span>
-        </div>
-    </div>
-</div>
+<!-- [수정됨] 전체 헤더를 flex 컨테이너로 감싸서 배치 정렬 -->
+<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 
-<!-- 상단 한줄 코멘트 -->
-<div style="margin-left: 20px; background: #e3f2fd; padding: 8px 15px; border-radius: 20px 20px 20px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); max-width: 300px;">
-    <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive;">
-        <i class="fas fa-robot" style="margin-right: 5px;"></i>
-        오늘 날씨 정보가 업데이트 되었습니다!
-    </p>
+    <!-- 왼쪽: 날씨 및 코멘트 -->
+    <div style="display: flex; align-items: center;">
+        <!-- 날씨 위젯 -->
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="text-align: center;">
+                <i class="fas {{ info.weather.icon }} fa-2x" style="color: #fbc02d;"></i>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: 900; color: #333;">
+                    {{ info.weather.temp }}
+                </div>
+                <div style="font-size: 0.9rem; color: #666; display: flex; align-items: center; gap: 5px;">
+                     <span>{{ info.weather.status }}</span>
+                     <span style="width: 1px; height: 10px; background: #ccc;"></span>
+                     <span>{{ info.time_now }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상단 한줄 코멘트 -->
+        <div style="margin-left: 20px; background: #e3f2fd; padding: 8px 15px; border-radius: 20px 20px 20px 0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); max-width: 300px;">
+            <p style="margin: 0; font-size: 0.85rem; color: #1565c0; font-family: 'Gamja Flower', cursive;">
+                <i class="fas fa-robot" style="margin-right: 5px;"></i>
+                오늘 날씨 정보가 업데이트 되었습니다!
+            </p>
+        </div>
+    </div>
+
+    <!-- [추가됨] 오른쪽: 유저 프로필 및 로그아웃 -->
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <div style="text-align: right;">
+            <span style="display: block; font-weight: bold; color: #333; font-size: 0.95rem;">
+                {{ current_user.username }}님
+            </span>
+            <span style="display: block; font-size: 0.75rem; color: #888;">
+                {{ current_user.email }}
+            </span>
+        </div>
+        <a href="{{ url_for('logout') }}" class="btn-outline" style="text-decoration: none; color: #ff5252; border-color: #ff5252; font-size: 0.85rem; padding: 5px 12px; border-radius: 20px; transition: all 0.2s;">
+            <i class="fas fa-sign-out-alt"></i> 로그아웃
+        </a>
+    </div>
+
 </div>
 {% endblock %}
 

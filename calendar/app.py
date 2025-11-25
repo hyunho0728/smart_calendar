@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
-from datetime import datetime
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+from datetime import datetime, timedelta
 import calendar
 import requests
 import google.generativeai as genai
@@ -7,61 +7,273 @@ import json
 from dotenv import load_dotenv
 import os
 import pymysql
+# [추가] Flask-Login 및 보안 관련 라이브러리 임포트
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
-#.env 파일 내용 로드
+# .env 파일 내용 로드
 load_dotenv()
 
-def InitilizeDB():
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("create database if not exists cal_db")
-            cursor.execute("use cal_db")
-            cursor.execute("""
-                           CREATE TABLE IF NOT EXISTS users 
-                           (
-                                user_id INT AUTO_INCREMENT PRIMARY KEY,  -- 고유 ID (자동 증가)
-                                username VARCHAR(50) NOT NULL,           -- 사용자 이름
-                                email VARCHAR(100) NOT NULL UNIQUE,      -- 이메일 (중복 불가)
-                                password_hash VARCHAR(255) NOT NULL,     -- 비밀번호 (암호화하여 저장 권장)
-                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- 계정 생성일
-                            );""")
-            cursor.execute("""CREATE TABLE IF NOT EXISTS schedules
-                              (
-                                  schedule_id INT AUTO_INCREMENT PRIMARY KEY,       -- 일정 고유 ID
-                                  user_id     INT          NOT NULL,                -- 어떤 유저의 일정인지 (외래 키)
-                                  title       VARCHAR(150) NOT NULL,                -- 일정 제목
-                                  description TEXT,                                 -- 일정 상세 내용 (긴 글 가능)
-                                  start_date  DATETIME     NOT NULL,                -- 시작 시간 (년-월-일 시:분:초)
-                                  end_date    DATETIME     NOT NULL,                -- 종료 시간
-                                  color       VARCHAR(7) DEFAULT '#3788d8',         -- 캘린더 표시 색상 (Hex 코드)
-                                  created_at  TIMESTAMP  DEFAULT CURRENT_TIMESTAMP, -- 일정 생성일
-                              );""")
-            cursor.execute("CONSTRAINT fk_user_schedule")
-            cursor.execute("FOREIGN KEY (user_id) REFERENCES users(user_id)")
-            cursor.execute("ON DELETE CASCADE")
+# 전역 DB 설정 (환경변수 없으면 기본값 사용)
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+DB_USER = os.environ.get("DB_USER", "root")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_CHARSET = "utf8mb4"
 
-    except Exception as e:
-        print(f"오류 : {e}")
-
-# db 연결
-conn = pymysql.connect(
-    host="127.0.0.1",
-    user="root",
-    passwd=f"{os.environ.get("DB_PASSWORD")}",
-    charset="utf8"
-)
-
-# db 기초값 생성
-InitilizeDB()
 app = Flask(__name__)
+# [추가] 세션 관리를 위한 시크릿 키 설정 (실제 배포시에는 복잡한 문자열로 변경 필요)
+app.secret_key = os.environ.get("SECRET_KEY", "my_secret_key_1234")
+
+# [추가] Flask-Login 초기화
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'  # 로그인 안 된 사용자가 접근하면 이동할 뷰
+
 
 # ---------------------------------------------------------
-# [설정] API 키
+# [DB 관리] 연결 및 초기화
+# ---------------------------------------------------------
+def get_db_connection():
+    return pymysql.connect(
+        host=DB_HOST,
+        user=DB_USER,
+        passwd=DB_PASSWORD,
+        charset=DB_CHARSET,
+        cursorclass=pymysql.cursors.DictCursor
+    )
+
+
+def InitilizeDB():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. DB 생성 및 사용
+            cursor.execute("CREATE DATABASE IF NOT EXISTS cal_db")
+            cursor.execute("USE cal_db")
+
+            # 2. Users 테이블 생성
+            cursor.execute("""
+                           CREATE TABLE IF NOT EXISTS users
+                           (
+                               user_id
+                               INT
+                               AUTO_INCREMENT
+                               PRIMARY
+                               KEY,
+                               username
+                               VARCHAR
+                           (
+                               50
+                           ) NOT NULL,
+                               email VARCHAR
+                           (
+                               100
+                           ) NOT NULL UNIQUE,
+                               password_hash VARCHAR
+                           (
+                               255
+                           ) NOT NULL,
+                               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                               )
+                           """)
+
+            # 3. Schedules 테이블 생성 (문법 오류 수정됨)
+            # 4. (테스트용) 기본 유저 확인 (비밀번호: 1234 로 설정하여 생성)
+            cursor.execute("SELECT count(*) as cnt FROM users WHERE user_id = 1")
+            result = cursor.fetchone()
+            if result['cnt'] == 0:
+                # '1234'를 해시화하여 저장
+                pw_hash = generate_password_hash('1234')
+                cursor.execute("""
+                               INSERT INTO users (username, email, password_hash)
+                               VALUES ('admin', 'admin@example.com', %s)
+                               """, (pw_hash,))
+                conn.commit()
+                print("✅ 기본 유저(admin, id=1, pw=1234)가 생성되었습니다.")
+
+        conn.commit()
+        print("✅ 데이터베이스 초기화 완료")
+    except Exception as e:
+        print(f"⚠️ DB 초기화 오류 : {e}")
+    finally:
+        conn.close()
+
+
+# 앱 시작 시 DB 초기화 실행
+InitilizeDB()
+
+
+# ---------------------------------------------------------
+# [User 클래스 및 User Loader]
+# ---------------------------------------------------------
+class User(UserMixin):
+    def __init__(self, id, username, email):
+        self.id = id
+        self.username = username
+        self.email = email
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db_connection()
+    user = None
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            cursor.execute("SELECT user_id, username, email FROM users WHERE user_id = %s", (user_id,))
+            result = cursor.fetchone()
+            if result:
+                user = User(id=result['user_id'], username=result['username'], email=result['email'])
+    except Exception as e:
+        print(f"User Load Error: {e}")
+    finally:
+        conn.close()
+    return user
+
+
+# ---------------------------------------------------------
+# [인증 관련 라우트] 로그인/회원가입/로그아웃
+# ---------------------------------------------------------
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("USE cal_db")
+                # 이메일 중복 확인
+                cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
+                if cursor.fetchone():
+                    flash("이미 존재하는 이메일입니다.")
+                    return redirect(url_for('register'))
+
+                # 비밀번호 해시화 및 저장
+                pw_hash = generate_password_hash(password)
+                cursor.execute("INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
+                               (username, email, pw_hash))
+            conn.commit()
+            flash("회원가입 성공! 로그인해주세요.")
+            return redirect(url_for('login'))
+        except Exception as e:
+            print(e)
+            flash("회원가입 중 오류가 발생했습니다.")
+        finally:
+            conn.close()
+    return render_template('register.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("USE cal_db")
+                cursor.execute("SELECT user_id, username, email, password_hash FROM users WHERE email = %s", (email,))
+                result = cursor.fetchone()
+
+                if result and check_password_hash(result['password_hash'], password):
+                    user = User(id=result['user_id'], username=result['username'], email=result['email'])
+                    login_user(user)
+                    return redirect(url_for('dashboard'))
+                else:
+                    flash("이메일 또는 비밀번호가 올바르지 않습니다.")
+        finally:
+            conn.close()
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+
+# ---------------------------------------------------------
+# [DB 헬퍼 함수] 일정 조회 및 추가
+# ---------------------------------------------------------
+
+def fetch_events_from_db(user_id):
+    """
+    DB에서 일정을 가져와서 기존 템플릿이 사용하는
+    {'YYYY-MM-DD': [{'title':..., 'time':..., 'type':...}]} 형태로 변환하여 반환
+    """
+    conn = get_db_connection()
+    events_dict = {}
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            # user_id에 해당하는 일정 조회
+            sql = "SELECT title, start_date FROM schedules WHERE user_id = %s ORDER BY start_date ASC"
+            cursor.execute(sql, (user_id,))
+            rows = cursor.fetchall()
+
+            for row in rows:
+                dt = row['start_date']  # datetime 객체
+                date_str = dt.strftime("%Y-%m-%d")  # 키값 (YYYY-MM-DD)
+                time_str = dt.strftime("%H:%M")  # 표시 시간 (HH:MM)
+
+                if date_str not in events_dict:
+                    events_dict[date_str] = []
+
+                events_dict[date_str].append({
+                    'title': row['title'],
+                    'time': time_str,
+                    'type': 'bg-orange'  # 색상 로직은 필요시 DB color 컬럼 활용 가능
+                })
+    except Exception as e:
+        print(f"일정 조회 실패: {e}")
+    finally:
+        conn.close()
+
+    return events_dict
+
+
+def insert_event_to_db(user_id, title, date_str, hour, minute):
+    """
+    일정을 DB에 저장
+    """
+    conn = get_db_connection()
+    try:
+        # 시간 문자열 처리
+        if not hour or not minute:
+            hour = "00"
+            minute = "00"
+
+        # DATETIME 문자열 생성
+        start_dt_str = f"{date_str} {hour}:{minute}:00"
+        # 종료 시간은 임의로 1시간 뒤로 설정 (필요시 입력받도록 수정 가능)
+        start_dt = datetime.strptime(start_dt_str, "%Y-%m-%d %H:%M:%S")
+        end_dt = start_dt + timedelta(hours=1)
+
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            sql = """
+                  INSERT INTO schedules (user_id, title, start_date, end_date)
+                  VALUES (%s, %s, %s, %s) \
+                  """
+            cursor.execute(sql, (user_id, title, start_dt, end_dt))
+        conn.commit()
+    except Exception as e:
+        print(f"일정 저장 실패: {e}")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------
+# [설정] API 키 및 Gemini
 # ---------------------------------------------------------
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Gemini 설정
 genai.configure(api_key=GEMINI_API_KEY)
 
 try:
@@ -70,14 +282,9 @@ except:
     print("⚠️ 2.5 모델 로드 실패, 1.5-flash로 전환합니다.")
     model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 데이터 저장소 (일정)
-events_db = {}
-
 # 캐시 저장소들
 ootd_cache = {"weather_key": None, "text": None}
 place_cache = {"data": None}
-
-# [추가됨] 활동 추천 캐시
 activity_cache = {"data": None}
 
 
@@ -152,7 +359,7 @@ def get_gemini_place_recommendation(city="안성"):
         }
 
 
-# --- [추가됨] [함수 4] Gemini에게 활동 추천 요청 (일정 고려) ---
+# --- [함수 4] Gemini에게 활동 추천 요청 (일정 고려) ---
 def get_gemini_activity_recommendation(weather_data, today_schedule):
     try:
         # 일정 정보를 텍스트로 변환
@@ -226,6 +433,7 @@ def api_get_place():
 
 # [추가됨] 활동 추천 API
 @app.route('/api/get_activity', methods=['POST'])
+@login_required  # 로그인 필수
 def api_get_activity():
     global activity_cache
     req_data = request.get_json() or {}
@@ -237,9 +445,11 @@ def api_get_activity():
         "temp": req_data.get('temp', '')
     }
 
-    # 오늘 일정 가져오기 (서버 DB 조회)
+    # DB에서 오늘 일정 가져오기
+    # fetch_events_from_db()는 전체 일정을 가져오므로 오늘 날짜 키만 추출
     today_str = datetime.now().strftime("%Y-%m-%d")
-    today_schedule = events_db.get(today_str, [])
+    all_events = fetch_events_from_db(user_id=current_user.id)  # [변경] 로그인한 유저 ID 사용
+    today_schedule = all_events.get(today_str, [])
 
     # 캐시 확인
     if activity_cache['data'] and not force_refresh:
@@ -255,6 +465,7 @@ def api_get_activity():
 # [메인 화면] 대시보드
 # =========================================================
 @app.route('/')
+@login_required  # [추가] 로그인 필요
 def dashboard():
     now = datetime.now()
     weather_info = get_real_weather("Anseong")
@@ -262,12 +473,15 @@ def dashboard():
     # 초기 로딩값들
     ootd_text = "gemini 답변을 기다리는중..."
     place_info = {"name": "로딩중...", "tags": [], "menu": ""}
-    activity_info = []  # [추가됨] 활동 정보 초기값 (빈 리스트)
+    activity_info = []
 
     dashboard_schedule = []
     today_date_obj = now.date()
 
-    for date_str, events in events_db.items():
+    # DB에서 일정 가져오기 (로그인한 유저)
+    events_from_db = fetch_events_from_db(user_id=current_user.id)
+
+    for date_str, events in events_from_db.items():
         try:
             event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             diff = (event_date - today_date_obj).days
@@ -284,9 +498,8 @@ def dashboard():
         except ValueError:
             continue
 
-    dashboard_schedule.sort(key=lambda x: (x['full_date'], x['sort_time']))
-
     today_info = {
+        "username": current_user.username,  # [추가] 사용자 이름 전달
         "date": now.strftime("%m/%d/%Y"),
         "time_now": now.strftime("%I:%M %p"),
         "weather": weather_info,
@@ -302,6 +515,7 @@ def dashboard():
 # [캘린더 화면]
 # =========================================================
 @app.route('/calendar')
+@login_required  # [추가] 로그인 필요
 def calendar_page():
     now = datetime.now()
     try:
@@ -324,9 +538,12 @@ def calendar_page():
     start_weekday, days_in_month = calendar.monthrange(year, month)
     start_blank_count = (start_weekday + 1) % 7
 
+    # DB에서 일정 가져오기 (로그인한 유저)
+    events_from_db = fetch_events_from_db(user_id=current_user.id)
+
     return render_template(
         'calendar.html',
-        events=events_db,
+        events=events_from_db,  # DB 데이터 전달
         year=year, month=month,
         month_name=calendar.month_name[month],
         days_in_month=days_in_month,
@@ -338,25 +555,16 @@ def calendar_page():
 
 
 @app.route('/add_event', methods=['POST'])
+@login_required  # [추가] 로그인 필요
 def add_event():
-    date = request.form.get('date')
+    date = request.form.get('date')  # YYYY-MM-DD
     title = request.form.get('title')
-    hour = request.form.get('hour')
-    minute = request.form.get('minute')
-
-    time_str = ""
-    if hour and minute:
-        time_str = f"{hour}:{minute}"
+    hour = request.form.get('hour')  # HH
+    minute = request.form.get('minute')  # MM
 
     if date and title:
-        if date not in events_db:
-            events_db[date] = []
-        events_db[date].append({
-            'title': title,
-            'time': time_str,
-            'type': 'bg-orange'
-        })
-        events_db[date].sort(key=lambda x: x.get('time') or "99:99")
+        # DB에 저장 (로그인한 유저 ID 사용)
+        insert_event_to_db(current_user.id, title, date, hour, minute)
 
     return redirect(url_for('calendar_page', year=int(date.split('-')[0]), month=int(date.split('-')[1])))
 
