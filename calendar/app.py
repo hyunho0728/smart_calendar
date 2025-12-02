@@ -544,6 +544,73 @@ def group_status(group_id):
         conn.close()
     return jsonify({"last_id": last_id})
 
+
+# [추가] 4. 일정 삭제
+@app.route('/delete_slot/<int:slot_id>', methods=['POST'])
+@login_required
+def delete_slot(slot_id):
+    invite_code = request.form.get('invite_code')
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            # 본인 확인(user_id) 후 삭제
+            cursor.execute("DELETE FROM available_slots WHERE slot_id=%s AND user_id=%s", (slot_id, current_user.id))
+            conn.commit()
+            flash("일정이 삭제되었습니다.")
+    except Exception as e:
+        print(f"Delete Error: {e}")
+        flash("삭제 중 오류가 발생했습니다.")
+    finally:
+        conn.close()
+
+    return redirect(url_for('shared_calendar', invite_code=invite_code))
+
+
+# [추가] 5. 일정 수정
+@app.route('/update_slot', methods=['POST'])
+@login_required
+def update_slot():
+    invite_code = request.form.get('invite_code')
+    slot_id = request.form.get('slot_id')
+
+    start_date = request.form.get('start_date')
+    start_hour = request.form.get('start_hour')
+    start_min = request.form.get('start_min')
+
+    end_date = request.form.get('end_date')
+    end_hour = request.form.get('end_hour')
+    end_min = request.form.get('end_min')
+
+    conn = get_db_connection()
+    try:
+        start_dt = datetime.strptime(f"{start_date} {start_hour}:{start_min}", "%Y-%m-%d %H:%M")
+        end_dt = datetime.strptime(f"{end_date} {end_hour}:{end_min}", "%Y-%m-%d %H:%M")
+
+        if end_dt <= start_dt:
+            flash("종료 시간이 시작 시간보다 늦어야 합니다.")
+            return redirect(url_for('shared_calendar', invite_code=invite_code))
+
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            # 본인 확인(user_id) 후 업데이트
+            cursor.execute("""
+                           UPDATE available_slots
+                           SET start_time=%s,
+                               end_time=%s
+                           WHERE slot_id = %s
+                             AND user_id = %s
+                           """, (start_dt, end_dt, slot_id, current_user.id))
+            conn.commit()
+            flash("일정이 수정되었습니다.")
+    except Exception as e:
+        print(f"Update Error: {e}")
+        flash("수정 실패")
+    finally:
+        conn.close()
+
+    return redirect(url_for('shared_calendar', invite_code=invite_code))
+
 # ---------------------------------------------------------
 # [기존 라우트 및 Gemini AI 설정 (복구됨)]
 # ---------------------------------------------------------
