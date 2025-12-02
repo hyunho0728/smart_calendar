@@ -685,18 +685,36 @@ def get_gemini_ootd_text(weather_data):
 def get_gemini_place_recommendation(city="안성"):
     try:
         prompt = f"경기도 {city} 맛집/카페 추천. JSON: {{ \"name\": \"..\", \"tags\": [\"..\"], \"menu\": \"..\" }}"
-        text = model.generate_content(prompt).text.replace('```json', '').replace('```', '').strip()
+        response = model.generate_content(prompt)
+        text = response.text
+
+        # [수정] JSON 부분만 정확히 추출 (JSONDecoder 사용으로 Extra data 오류 해결)
+        start = text.find('{')
+        if start != -1:
+            obj, _ = json.JSONDecoder().raw_decode(text[start:])
+            return obj
+
         return json.loads(text)
-    except:
-        return {"name": "추천 맛집", "tags": ["맛집"], "menu": "메뉴"}
+    except Exception as e:
+        print(f"Place Error: {e}")
+        return {"name": "안성 맞춤 맛집", "tags": ["맛집탐방"], "menu": "맛있는 한 끼"}
 
 
 def get_gemini_activity_recommendation(weather_data, today_schedule):
     try:
         prompt = f"날씨: {weather_data['status']}, 일정 고려하여 자투리 시간 활동 2개 추천. JSON: [ {{ \"title\": \"..\", \"desc\": \"..\" }} ]"
-        text = model.generate_content(prompt).text.replace('```json', '').replace('```', '').strip()
+        response = model.generate_content(prompt)
+        text = response.text
+
+        # [수정] 리스트([]) 부분만 정확히 추출
+        start = text.find('[')
+        if start != -1:
+            obj, _ = json.JSONDecoder().raw_decode(text[start:])
+            return obj
+
         return json.loads(text)
-    except:
+    except Exception as e:
+        print(f"Activity Error: {e}")
         return [{"title": "휴식", "desc": "편안한 시간 보내기"}]
 
 
@@ -714,7 +732,13 @@ def api_get_ootd():
 @app.route('/api/get_place', methods=['POST'])
 def api_get_place():
     global place_cache
-    if place_cache['data'] and not request.get_json().get('refresh'): return jsonify(place_cache['data'])
+    # [수정] 요청 데이터가 없어도 오류 나지 않도록 안전하게 처리
+    req_data = request.get_json() or {}
+    force_refresh = req_data.get('refresh', False)
+
+    if place_cache['data'] and not force_refresh:
+        return jsonify(place_cache['data'])
+
     place_cache['data'] = get_gemini_place_recommendation("안성")
     return jsonify(place_cache['data'])
 
@@ -723,9 +747,21 @@ def api_get_place():
 @login_required
 def api_get_activity():
     global activity_cache
-    if activity_cache['data'] and not request.get_json().get('refresh'): return jsonify(activity_cache['data'])
-    activity_cache['data'] = get_gemini_activity_recommendation({"status": "", "temp": ""}, [])
-    return jsonify(activity_cache['data'])
+    # [수정] 요청 데이터 안전 처리
+    req_data = request.get_json() or {}
+    force_refresh = req_data.get('refresh', False)
+
+    weather_data = {"status": req_data.get('status', ''), "temp": req_data.get('temp', '')}
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    all_events = fetch_events_from_db(user_id=current_user.id)
+    today_schedule = all_events.get(today_str, [])
+
+    if activity_cache['data'] and not force_refresh:
+        return jsonify(activity_cache['data'])
+
+    activity_data = get_gemini_activity_recommendation(weather_data, today_schedule)
+    activity_cache['data'] = activity_data
+    return jsonify(activity_data)
 
 
 @app.route('/')
