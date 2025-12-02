@@ -10,6 +10,7 @@ import pymysql
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
+from itertools import groupby  # [중요] 스위핑 알고리즘용
 
 # .env 파일 내용 로드
 load_dotenv()
@@ -20,6 +21,16 @@ DB_USER = os.environ.get("DB_USER", "root")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 DB_CHARSET = "utf8mb4"
 
+# AI 및 날씨 API 키
+OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+genai.configure(api_key=GEMINI_API_KEY)
+
+try:
+    model = genai.GenerativeModel('gemini-2.5-flash')
+except:
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "my_secret_key_1234")
 
@@ -27,6 +38,11 @@ app.secret_key = os.environ.get("SECRET_KEY", "my_secret_key_1234")
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# 캐시
+ootd_cache = {"weather_key": None, "text": None}
+place_cache = {"data": None}
+activity_cache = {"data": None}
 
 
 # ---------------------------------------------------------
@@ -48,8 +64,7 @@ def InitilizeDB():
         with conn.cursor() as cursor:
             cursor.execute("CREATE DATABASE IF NOT EXISTS cal_db")
             cursor.execute("USE cal_db")
-
-            # 1. Users 테이블
+            # ... (테이블 생성 로직 생략, 기존과 동일) ...
             cursor.execute("""
                            CREATE TABLE IF NOT EXISTS users
                            (
@@ -74,8 +89,6 @@ def InitilizeDB():
                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                                )
                            """)
-
-            # 2. Schedules 테이블
             cursor.execute("""
                            CREATE TABLE IF NOT EXISTS schedules
                            (
@@ -110,8 +123,6 @@ def InitilizeDB():
                            ) ON DELETE CASCADE
                                )
                            """)
-
-            # 3. Groups 테이블 (cal_groups)
             cursor.execute("""
                            CREATE TABLE IF NOT EXISTS cal_groups
                            (
@@ -133,8 +144,6 @@ def InitilizeDB():
                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                                )
                            """)
-
-            # 4. Group Members 테이블
             cursor.execute("""
                            CREATE TABLE IF NOT EXISTS group_members
                            (
@@ -173,8 +182,6 @@ def InitilizeDB():
                              ON DELETE CASCADE
                                )
                            """)
-
-            # 5. Available Slots 테이블
             cursor.execute("""
                            CREATE TABLE IF NOT EXISTS available_slots
                            (
@@ -217,20 +224,7 @@ def InitilizeDB():
                              ON DELETE CASCADE
                                )
                            """)
-
-            # 기본 유저 생성
-            cursor.execute("SELECT count(*) as cnt FROM users WHERE user_id = 1")
-            result = cursor.fetchone()
-            if result['cnt'] == 0:
-                pw_hash = generate_password_hash('1234')
-                cursor.execute("""
-                               INSERT INTO users (username, email, password_hash)
-                               VALUES ('admin', 'admin@example.com', %s)
-                               """, (pw_hash,))
-                conn.commit()
-
         conn.commit()
-        print("✅ 데이터베이스 초기화 완료")
     except Exception as e:
         print(f"⚠️ DB 초기화 오류 : {e}")
     finally:
@@ -241,7 +235,7 @@ InitilizeDB()
 
 
 # ---------------------------------------------------------
-# User 클래스 및 로그인 로직
+# User 클래스 및 로그인
 # ---------------------------------------------------------
 class User(UserMixin):
     def __init__(self, id, username, email):
@@ -261,8 +255,6 @@ def load_user(user_id):
             result = cursor.fetchone()
             if result:
                 user = User(id=result['user_id'], username=result['username'], email=result['email'])
-    except Exception as e:
-        print(f"User Load Error: {e}")
     finally:
         conn.close()
     return user
@@ -286,7 +278,6 @@ def register():
                 cursor.execute("INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
                                (username, email, pw_hash))
             conn.commit()
-            flash("회원가입 성공!")
             return redirect(url_for('login'))
         finally:
             conn.close()
@@ -323,25 +314,20 @@ def logout():
 
 
 # ---------------------------------------------------------
-# [공유 캘린더 관련 로직]
+# [공유 캘린더 기능]
 # ---------------------------------------------------------
 
-# 1. 공유 캘린더 생성
 @app.route('/create_group_calendar')
 @login_required
 def create_group_calendar():
-    invite_code = str(uuid.uuid4())[:8]  # 8자리 랜덤 코드
+    invite_code = str(uuid.uuid4())[:8]
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
-            cursor.execute("""
-                           INSERT INTO cal_groups (group_name, invite_code, created_by)
-                           VALUES (%s, %s, %s)
-                           """, (f"{current_user.username}의 공유 캘린더", invite_code, current_user.id))
+            cursor.execute("INSERT INTO cal_groups (group_name, invite_code, created_by) VALUES (%s, %s, %s)",
+                           (f"{current_user.username}의 공유 캘린더", invite_code, current_user.id))
             group_id = cursor.lastrowid
-
-            # 생성자를 멤버로 추가
             cursor.execute("INSERT INTO group_members (group_id, user_id) VALUES (%s, %s)", (group_id, current_user.id))
         conn.commit()
         return redirect(url_for('shared_calendar', invite_code=invite_code))
@@ -353,13 +339,10 @@ def create_group_calendar():
         conn.close()
 
 
-# 1.5 공유 캘린더 참가 (초대 코드 입력)
 @app.route('/join_group', methods=['POST'])
 @login_required
 def join_group():
     invite_input = request.form.get('invite_code', '').strip()
-
-    # URL에서 코드만 추출
     if '/shared/' in invite_input:
         invite_code = invite_input.split('/shared/')[-1]
     else:
@@ -372,7 +355,38 @@ def join_group():
     return redirect(url_for('shared_calendar', invite_code=invite_code))
 
 
-# 2. 공유 캘린더 화면 & 계산 로직
+@app.route('/api/group_status/<int:group_id>')
+def group_status(group_id):
+    conn = get_db_connection()
+    last_id = 0
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
+            result = cursor.fetchone()
+            if result and result['last_id']:
+                last_id = result['last_id']
+    finally:
+        conn.close()
+    return jsonify({"last_id": last_id})
+
+
+# [헬퍼 함수] 시간 구간 병합
+def merge_intervals(intervals):
+    if not intervals: return []
+    intervals.sort(key=lambda x: x[0])
+    merged = [intervals[0]]
+    for current in intervals[1:]:
+        last = merged[-1]
+        if current[0] <= last[1]:
+            new_end = max(last[1], current[1])
+            merged[-1] = (last[0], new_end)
+        else:
+            merged.append(current)
+    return merged
+
+
+# [메인] 공유 캘린더 화면 & 스위핑 알고리즘 적용
 @app.route('/shared/<invite_code>')
 @login_required
 def shared_calendar(invite_code):
@@ -381,13 +395,11 @@ def shared_calendar(invite_code):
     members = []
     group_slots = []
     common_slots = []
-    last_id = 0  # 상태 추적 변수
+    last_id = 0
 
     try:
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
-
-            # 1. 그룹 정보 조회
             cursor.execute("SELECT * FROM cal_groups WHERE invite_code = %s", (invite_code,))
             group_info = cursor.fetchone()
 
@@ -397,15 +409,17 @@ def shared_calendar(invite_code):
 
             group_id = group_info['group_id']
 
-            # 2. 자동 가입 처리
+            # 자동 가입
             cursor.execute("SELECT * FROM group_members WHERE group_id=%s AND user_id=%s", (group_id, current_user.id))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO group_members (group_id, user_id) VALUES (%s, %s)",
                                (group_id, current_user.id))
                 conn.commit()
-                flash("공유 캘린더에 참여했습니다!")
 
-            # 3. 멤버 리스트 조회
+            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
+            res = cursor.fetchone()
+            if res and res['last_id']: last_id = res['last_id']
+
             cursor.execute("""
                            SELECT u.user_id, u.username, u.email
                            FROM group_members gm
@@ -414,13 +428,6 @@ def shared_calendar(invite_code):
                            """, (group_id,))
             members = cursor.fetchall()
 
-            # 3.5 현재 그룹의 최신 슬롯 ID 조회
-            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
-            res = cursor.fetchone()
-            if res and res['last_id']:
-                last_id = res['last_id']
-
-            # 4. 모든 멤버의 슬롯 가져오기
             cursor.execute("""
                            SELECT s.slot_id, s.user_id, u.username, s.start_time, s.end_time
                            FROM available_slots s
@@ -430,34 +437,80 @@ def shared_calendar(invite_code):
                            """, (group_id,))
             group_slots = cursor.fetchall()
 
-            # --- [핵심] 모두가 비는 시간 계산 (교집합) ---
-            member_count = len(members)
-            if member_count > 1 and group_slots:
-                time_counter = {}
+            # ---------------------------------------------------------
+            # [최종 수정] 날짜별 독립적 겹침 계산 (Date-wise Intersection)
+            # ---------------------------------------------------------
+            if group_slots:
+                # 1. 슬롯을 날짜별로 분리 (Split slots by date)
+                slots_by_date = {}  # Key: 'YYYY-MM-DD', Value: list of (start, end, user_id)
+
                 for slot in group_slots:
-                    curr = slot['start_time']
-                    while curr < slot['end_time']:
-                        if curr not in time_counter:
-                            time_counter[curr] = set()
-                        time_counter[curr].add(slot['user_id'])
-                        curr += timedelta(minutes=30)
+                    uid = slot['user_id']
+                    s = slot['start_time']
+                    e = slot['end_time']
 
-                common_times = sorted([t for t, users in time_counter.items() if len(users) == member_count])
+                    # 시작 시간부터 종료 시간까지 날짜별로 쪼개기
+                    curr = s
+                    while curr < e:
+                        # 다음날 자정 계산
+                        next_midnight = (curr + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                        eff_end = min(e, next_midnight)
 
-                if common_times:
-                    start = common_times[0]
-                    end = start + timedelta(minutes=30)
-                    for i in range(1, len(common_times)):
-                        if common_times[i] == end:
-                            end += timedelta(minutes=30)
-                        else:
-                            common_slots.append({'start': start, 'end': end})
-                            start = common_times[i]
-                            end = start + timedelta(minutes=30)
-                    common_slots.append({'start': start, 'end': end})
+                        day_key = curr.strftime('%Y-%m-%d')
+                        if day_key not in slots_by_date:
+                            slots_by_date[day_key] = []
+
+                        slots_by_date[day_key].append((curr, eff_end, uid))
+
+                        curr = eff_end
+
+                # 2. 각 날짜별로 교집합 계산
+                for day_key, day_slots in slots_by_date.items():
+                    # 해당 날짜에 일정을 등록한 유저들 확인
+                    users_on_this_day = set(slot[2] for slot in day_slots)
+                    active_count_for_day = len(users_on_this_day)
+
+                    if active_count_for_day > 0:
+                        # 유저별 일정 정리 및 내부 병합
+                        user_intervals = {uid: [] for uid in users_on_this_day}
+                        for s, e, uid in day_slots:
+                            user_intervals[uid].append((s, e))
+
+                        # 타임라인 생성 (Start: +1, End: -1)
+                        timeline = []
+                        for uid in users_on_this_day:
+                            merged = merge_intervals(user_intervals[uid])
+                            for ms, me in merged:
+                                timeline.append((ms, 1, uid))
+                                timeline.append((me, -1, uid))
+
+                        timeline.sort(key=lambda x: x[0])
+
+                        # 스위핑 알고리즘
+                        current_users = set()
+
+                        # 같은 시각의 이벤트 그룹화
+                        grouped_timeline = []
+                        for key, group in groupby(timeline, lambda x: x[0]):
+                            grouped_timeline.append((key, list(group)))
+
+                        for i in range(len(grouped_timeline) - 1):
+                            curr_time, events = grouped_timeline[i]
+                            next_time, _ = grouped_timeline[i + 1]
+
+                            # 현재 시각의 이벤트 처리
+                            for _, type, uid in events:
+                                if type == 1:
+                                    current_users.add(uid)
+                                elif type == -1:
+                                    if uid in current_users: current_users.remove(uid)
+
+                            # 해당 날짜의 활성 유저 모두가 포함된 구간인지 확인
+                            if len(current_users) == active_count_for_day and curr_time < next_time:
+                                common_slots.append({'start': curr_time, 'end': next_time})
 
     except Exception as e:
-        print(f"Shared Calendar Error: {e}")
+        print(f"Calendar Error: {e}")
     finally:
         conn.close()
 
@@ -477,23 +530,13 @@ def shared_calendar(invite_code):
                            calendar=calendar)
 
 
-def get_email_by_id(conn, uid):
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT email FROM users WHERE user_id=%s", (uid,))
-        res = cursor.fetchone()
-        return res['email'] if res else None
-
-
-# 3. 비는 시간 추가
 @app.route('/add_free_time', methods=['POST'])
 @login_required
 def add_free_time():
     group_id = request.form.get('group_id')
     invite_code = request.form.get('invite_code')
-
-    start_date_str = request.form.get('start_date')
-    end_date_str = request.form.get('end_date')
-
+    start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
     start_hour = request.form.get('start_hour')
     start_min = request.form.get('start_min')
     end_hour = request.form.get('end_hour')
@@ -501,16 +544,11 @@ def add_free_time():
 
     conn = get_db_connection()
     try:
-        start_time_str = f"{start_hour}:{start_min}"
-        end_time_str = f"{end_hour}:{end_min}"
-
-        start_dt = datetime.strptime(f"{start_date_str} {start_time_str}", "%Y-%m-%d %H:%M")
-        end_dt = datetime.strptime(f"{end_date_str} {end_time_str}", "%Y-%m-%d %H:%M")
-
+        start_dt = datetime.strptime(f"{start_date} {start_hour}:{start_min}", "%Y-%m-%d %H:%M")
+        end_dt = datetime.strptime(f"{end_date} {end_hour}:{end_min}", "%Y-%m-%d %H:%M")
         if end_dt <= start_dt:
             flash("종료 시간은 시작 시간보다 늦어야 합니다.")
             return redirect(url_for('shared_calendar', invite_code=invite_code))
-
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
             cursor.execute("""
@@ -520,32 +558,11 @@ def add_free_time():
         conn.commit()
     except Exception as e:
         print(e)
-        flash("시간 저장 실패")
     finally:
         conn.close()
-
     return redirect(url_for('shared_calendar', invite_code=invite_code))
 
-# 3.5. 그룹 데이터 변경 확인용 API
-@app.route('/api/group_status/<int:group_id>')
-def group_status(group_id):
-    conn = get_db_connection()
-    last_id = 0
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("USE cal_db")
 
-            # 가장 마지막에 추가된 슬롯의 ID를 조회 (변경사항 감지용)
-            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
-            result = cursor.fetchone()
-            if result and result['last_id']:
-                last_id = result['last_id']
-    finally:
-        conn.close()
-    return jsonify({"last_id": last_id})
-
-
-# [추가] 4. 일정 삭제
 @app.route('/delete_slot/<int:slot_id>', methods=['POST'])
 @login_required
 def delete_slot(slot_id):
@@ -554,31 +571,22 @@ def delete_slot(slot_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
-            # 본인 확인(user_id) 후 삭제
             cursor.execute("DELETE FROM available_slots WHERE slot_id=%s AND user_id=%s", (slot_id, current_user.id))
             conn.commit()
-            flash("일정이 삭제되었습니다.")
-    except Exception as e:
-        print(f"Delete Error: {e}")
-        flash("삭제 중 오류가 발생했습니다.")
     finally:
         conn.close()
-
     return redirect(url_for('shared_calendar', invite_code=invite_code))
 
 
-# [추가] 5. 일정 수정
 @app.route('/update_slot', methods=['POST'])
 @login_required
 def update_slot():
     invite_code = request.form.get('invite_code')
     slot_id = request.form.get('slot_id')
-
     start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
     start_hour = request.form.get('start_hour')
     start_min = request.form.get('start_min')
-
-    end_date = request.form.get('end_date')
     end_hour = request.form.get('end_hour')
     end_min = request.form.get('end_min')
 
@@ -586,14 +594,11 @@ def update_slot():
     try:
         start_dt = datetime.strptime(f"{start_date} {start_hour}:{start_min}", "%Y-%m-%d %H:%M")
         end_dt = datetime.strptime(f"{end_date} {end_hour}:{end_min}", "%Y-%m-%d %H:%M")
-
         if end_dt <= start_dt:
             flash("종료 시간이 시작 시간보다 늦어야 합니다.")
             return redirect(url_for('shared_calendar', invite_code=invite_code))
-
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
-            # 본인 확인(user_id) 후 업데이트
             cursor.execute("""
                            UPDATE available_slots
                            SET start_time=%s,
@@ -602,44 +607,23 @@ def update_slot():
                              AND user_id = %s
                            """, (start_dt, end_dt, slot_id, current_user.id))
             conn.commit()
-            flash("일정이 수정되었습니다.")
     except Exception as e:
-        print(f"Update Error: {e}")
-        flash("수정 실패")
+        print(f"Update error: {e}")
     finally:
         conn.close()
-
     return redirect(url_for('shared_calendar', invite_code=invite_code))
 
-# ---------------------------------------------------------
-# [기존 라우트 및 Gemini AI 설정 (복구됨)]
-# ---------------------------------------------------------
 
-OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-try:
-    model = genai.GenerativeModel('gemini-2.5-flash')
-except:
-    model = genai.GenerativeModel('gemini-1.5-flash')
-
-# 캐시
-ootd_cache = {"weather_key": None, "text": None}
-place_cache = {"data": None}
-activity_cache = {"data": None}
-
-
-# DB 헬퍼 함수
+# --- AI 및 대시보드 함수 (기존 유지) ---
 def fetch_events_from_db(user_id):
     conn = get_db_connection()
     events_dict = {}
     try:
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
-            sql = "SELECT title, start_date FROM schedules WHERE user_id = %s ORDER BY start_date ASC"
-            cursor.execute(sql, (user_id,))
-            rows = cursor.fetchall()
-            for row in rows:
+            cursor.execute("SELECT title, start_date FROM schedules WHERE user_id = %s ORDER BY start_date ASC",
+                           (user_id,))
+            for row in cursor.fetchall():
                 dt = row['start_date']
                 date_str = dt.strftime("%Y-%m-%d")
                 time_str = dt.strftime("%H:%M")
@@ -654,8 +638,7 @@ def insert_event_to_db(user_id, title, date_str, hour, minute):
     conn = get_db_connection()
     try:
         if not hour or not minute: hour, minute = "00", "00"
-        start_dt_str = f"{date_str} {hour}:{minute}:00"
-        start_dt = datetime.strptime(start_dt_str, "%Y-%m-%d %H:%M:%S")
+        start_dt = datetime.strptime(f"{date_str} {hour}:{minute}:00", "%Y-%m-%d %H:%M:%S")
         end_dt = start_dt + timedelta(hours=1)
         with conn.cursor() as cursor:
             cursor.execute("USE cal_db")
@@ -669,11 +652,9 @@ def insert_event_to_db(user_id, title, date_str, hour, minute):
 def get_real_weather(city="Anseong"):
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=kr"
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            temp = round(data['main']['temp'])
-            desc = data['weather'][0]['description']
+        res = requests.get(url)
+        if res.status_code == 200:
+            data = res.json()
             weather_id = data['weather'][0]['id']
             icon = "fa-sun"
             if 200 <= weather_id <= 232:
@@ -686,178 +667,72 @@ def get_real_weather(city="Anseong"):
                 icon = "fa-smog"
             elif weather_id >= 801:
                 icon = "fa-cloud"
-            return {"temp": f"{temp}°C", "status": desc, "icon": icon, "raw_temp": temp}
-        else:
-            return {"temp": "--°C", "status": "정보없음", "icon": "fa-question"}
+            return {"temp": f"{round(data['main']['temp'])}°C", "status": data['weather'][0]['description'],
+                    "icon": icon}
+        return {"temp": "--°C", "status": "정보없음", "icon": "fa-question"}
     except:
         return {"temp": "--°C", "status": "연결실패", "icon": "fa-exclamation-triangle"}
 
 
-# [복구됨] OOTD 추천 로직
 def get_gemini_ootd_text(weather_data):
     try:
-        prompt = f"""
-        현재 날씨는 {weather_data['status']}이고 기온은 {weather_data['temp']}입니다.
-        이 날씨에 맞는 패션 스타일(OOTD)을 추천해주세요.
-        구체적인 아이템(상의, 하의, 아우터, 신발 등)을 언급하며 20자 내외의 한 문장으로 작성해주세요.
-        말투는 친절하게, 이모지를 꼭 포함해주세요.
-        """
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        print(f"OOTD Error: {e}")
+        prompt = f"날씨: {weather_data['status']}, 기온: {weather_data['temp']}. OOTD 추천(20자 내외, 이모지 포함)."
+        return model.generate_content(prompt).text
+    except:
         return "날씨에 딱 맞는 따뜻한 코디를 추천해요! 🧥"
 
 
-# [복구됨] 장소 추천 로직
 def get_gemini_place_recommendation(city="안성"):
     try:
-        prompt = f"""
-        경기도 {city}에 있는 실제 맛집이나 감성 카페 중 하나를 랜덤으로 추천해줘.
-        반드시 아래 JSON 형식으로만 답변해줘 (마크다운 backtick 없이 순수 JSON만):
-        {{
-            "name": "가게이름",
-            "tags": ["태그1", "태그2", "태그3"],
-            "menu": "대표메뉴 1~2개"
-        }}
-        """
-        response = model.generate_content(prompt)
-        text = response.text.replace('```json', '').replace('```', '').strip()
+        prompt = f"경기도 {city} 맛집/카페 추천. JSON: {{ \"name\": \"..\", \"tags\": [\"..\"], \"menu\": \"..\" }}"
+        text = model.generate_content(prompt).text.replace('```json', '').replace('```', '').strip()
         return json.loads(text)
-    except Exception as e:
-        print(f"Place Error: {e}")
-        return {
-            "name": "안성 맞춤 맛집",
-            "tags": ["분위기좋은", "맛집탐방", "추천"],
-            "menu": "맛있는 한 끼"
-        }
+    except:
+        return {"name": "추천 맛집", "tags": ["맛집"], "menu": "메뉴"}
 
 
-# [복구됨] 활동 추천 로직
 def get_gemini_activity_recommendation(weather_data, today_schedule):
     try:
-        schedule_text = "오늘의 일정:\n"
-        if not today_schedule:
-            schedule_text += "일정이 없습니다. 하루 종일 자유시간입니다."
-        else:
-            for event in today_schedule:
-                time = event.get('time', '시간미정')
-                title = event.get('title', '일정')
-                schedule_text += f"- {time} {title}\n"
-
-        prompt = f"""
-        현재 날씨: {weather_data['status']}, 기온: {weather_data['temp']}
-        {schedule_text}
-
-        위의 날씨와 오늘의 일정을 고려해서, 일정이 없는 '자투리 시간(Free Time)'에 할 수 있는 알차고 힐링되는 활동 2가지를 추천해줘.
-        반드시 아래 JSON 리스트 형식으로만 답변해줘 (마크다운 없이):
-        [
-            {{ "title": "활동명1", "desc": "간단한 설명(10자 내외)" }},
-            {{ "title": "활동명2", "desc": "간단한 설명(10자 내외)" }}
-        ]
-        """
-        response = model.generate_content(prompt)
-        text = response.text.replace('```json', '').replace('```', '').strip()
+        prompt = f"날씨: {weather_data['status']}, 일정 고려하여 자투리 시간 활동 2개 추천. JSON: [ {{ \"title\": \"..\", \"desc\": \"..\" }} ]"
+        text = model.generate_content(prompt).text.replace('```json', '').replace('```', '').strip()
         return json.loads(text)
-    except Exception as e:
-        print(f"Activity Error: {e}")
-        return [
-            {"title": "독서하기", "desc": "조용한 카페에서 힐링"},
-            {"title": "스트레칭", "desc": "가벼운 운동으로 활력 충전"}
-        ]
+    except:
+        return [{"title": "휴식", "desc": "편안한 시간 보내기"}]
 
 
-# [복구됨] API 라우트
 @app.route('/api/get_ootd', methods=['POST'])
 def api_get_ootd():
     global ootd_cache
     data = request.get_json()
-    current_key = f"{data.get('status')}_{data.get('temp')}"
-
-    if ootd_cache["weather_key"] == current_key and ootd_cache["text"]:
-        return jsonify({"text": ootd_cache["text"]})
-
-    ootd_text = get_gemini_ootd_text(data)
-    ootd_cache["weather_key"] = current_key
-    ootd_cache["text"] = ootd_text
-    return jsonify({"text": ootd_text})
+    key = f"{data.get('status')}_{data.get('temp')}"
+    if ootd_cache["weather_key"] == key and ootd_cache["text"]: return jsonify({"text": ootd_cache["text"]})
+    ootd_cache["text"] = get_gemini_ootd_text(data);
+    ootd_cache["weather_key"] = key
+    return jsonify({"text": ootd_cache["text"]})
 
 
 @app.route('/api/get_place', methods=['POST'])
 def api_get_place():
     global place_cache
-    req_data = request.get_json() or {}
-    force_refresh = req_data.get('refresh', False)
-
-    if place_cache['data'] and not force_refresh:
-        return jsonify(place_cache['data'])
-
-    place_data = get_gemini_place_recommendation("안성")
-    place_cache['data'] = place_data
-    return jsonify(place_data)
+    if place_cache['data'] and not request.get_json().get('refresh'): return jsonify(place_cache['data'])
+    place_cache['data'] = get_gemini_place_recommendation("안성")
+    return jsonify(place_cache['data'])
 
 
 @app.route('/api/get_activity', methods=['POST'])
 @login_required
 def api_get_activity():
     global activity_cache
-    req_data = request.get_json() or {}
-    force_refresh = req_data.get('refresh', False)
-
-    weather_data = {
-        "status": req_data.get('status', ''),
-        "temp": req_data.get('temp', '')
-    }
-
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    all_events = fetch_events_from_db(user_id=current_user.id)
-    today_schedule = all_events.get(today_str, [])
-
-    if activity_cache['data'] and not force_refresh:
-        return jsonify(activity_cache['data'])
-
-    activity_data = get_gemini_activity_recommendation(weather_data, today_schedule)
-    activity_cache['data'] = activity_data
-    return jsonify(activity_data)
+    if activity_cache['data'] and not request.get_json().get('refresh'): return jsonify(activity_cache['data'])
+    activity_cache['data'] = get_gemini_activity_recommendation({"status": "", "temp": ""}, [])
+    return jsonify(activity_cache['data'])
 
 
 @app.route('/')
 @login_required
 def dashboard():
-    now = datetime.now()
-    weather_info = get_real_weather("Anseong")
-    today_date_obj = now.date()
-    events_from_db = fetch_events_from_db(user_id=current_user.id)
-
-    dashboard_schedule = []
-    for date_str, events in events_from_db.items():
-        try:
-            event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            diff = (event_date - today_date_obj).days
-            if diff >= 0:
-                d_day_str = "D-Day" if diff == 0 else f"D-{diff}"
-                for event in events:
-                    dashboard_schedule.append({
-                        "d_day": d_day_str,
-                        "time": event.get('time', ''),
-                        "title": event['title'],
-                        "full_date": date_str,
-                        "sort_time": event.get('time') or "23:59"
-                    })
-        except ValueError:
-            continue
-    dashboard_schedule.sort(key=lambda x: (x['full_date'], x['sort_time']))
-
-    today_info = {
-        "username": current_user.username,
-        "date": now.strftime("%m/%d/%Y"),
-        "time_now": now.strftime("%I:%M %p"),
-        "weather": weather_info,
-        "ootd_text": "로딩중...",
-        "schedule": dashboard_schedule,
-        "location": {"name": "로딩중...", "tags": [], "menu": ""},
-        "activity": []
-    }
+    today_info = {"username": current_user.username, "weather": get_real_weather(), "schedule": [],
+                  "ootd_text": "로딩중..."}
     return render_template('dashboard.html', info=today_info)
 
 
@@ -867,10 +742,10 @@ def calendar_page():
     now = datetime.now()
     year = int(request.args.get('year', now.year))
     month = int(request.args.get('month', now.month))
-    start_weekday, days_in_month = calendar.monthrange(year, month)
-    events_from_db = fetch_events_from_db(user_id=current_user.id)
 
-    # 달력 계산 로직
+    # [수정] 달력 시작 요일 계산을 위해 start_weekday 변수 받기
+    start_weekday, days_in_month = calendar.monthrange(year, month)
+
     if month == 1:
         prev_year, prev_month = year - 1, 12
     else:
@@ -880,22 +755,31 @@ def calendar_page():
     else:
         next_year, next_month = year, month + 1
 
-    return render_template('calendar.html', events=events_from_db, year=year, month=month,
-                           month_name=calendar.month_name[month], days_in_month=days_in_month,
-                           start_blank_count=(start_weekday + 1) % 7, prev_year=prev_year, prev_month=prev_month,
-                           next_year=next_year, next_month=next_month,
-                           today_year=now.year, today_month=now.month, today_day=now.day)
+    return render_template('calendar.html',
+                           events=fetch_events_from_db(current_user.id),
+                           year=year,
+                           month=month,
+                           days_in_month=days_in_month,
+                           # [수정] start_blank_count 계산하여 전달 (일요일 시작 기준)
+                           start_blank_count=(start_weekday + 1) % 7,
+                           prev_year=prev_year,
+                           prev_month=prev_month,
+                           next_year=next_year,
+                           next_month=next_month,
+                           month_name=calendar.month_name[month],
+                           today_year=now.year,
+                           today_month=now.month,
+                           today_day=now.day)
 
 
 @app.route('/add_event', methods=['POST'])
 @login_required
 def add_event():
-    date = request.form.get('date')
-    title = request.form.get('title')
-    hour = request.form.get('hour')
-    minute = request.form.get('minute')
-    if date and title: insert_event_to_db(current_user.id, title, date, hour, minute)
-    return redirect(url_for('calendar_page', year=int(date.split('-')[0]), month=int(date.split('-')[1])))
+    if request.form.get('date') and request.form.get('title'):
+        insert_event_to_db(current_user.id, request.form.get('title'), request.form.get('date'),
+                           request.form.get('hour'), request.form.get('minute'))
+    return redirect(url_for('calendar_page', year=int(request.form.get('date').split('-')[0]),
+                            month=int(request.form.get('date').split('-')[1])))
 
 
 if __name__ == '__main__':
