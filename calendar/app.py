@@ -490,7 +490,9 @@ def get_email_by_id(conn, uid):
 def add_free_time():
     group_id = request.form.get('group_id')
     invite_code = request.form.get('invite_code')
-    date_str = request.form.get('date')
+
+    start_date_str = request.form.get('start_date')
+    end_date_str = request.form.get('end_date')
 
     start_hour = request.form.get('start_hour')
     start_min = request.form.get('start_min')
@@ -502,8 +504,8 @@ def add_free_time():
         start_time_str = f"{start_hour}:{start_min}"
         end_time_str = f"{end_hour}:{end_min}"
 
-        start_dt = datetime.strptime(f"{date_str} {start_time_str}", "%Y-%m-%d %H:%M")
-        end_dt = datetime.strptime(f"{date_str} {end_time_str}", "%Y-%m-%d %H:%M")
+        start_dt = datetime.strptime(f"{start_date_str} {start_time_str}", "%Y-%m-%d %H:%M")
+        end_dt = datetime.strptime(f"{end_date_str} {end_time_str}", "%Y-%m-%d %H:%M")
 
         if end_dt <= start_dt:
             flash("종료 시간은 시작 시간보다 늦어야 합니다.")

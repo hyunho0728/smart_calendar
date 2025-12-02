@@ -220,10 +220,11 @@
         const dStr = day < 10 ? '0' + day : day;
         const dateString = `${year}-${mStr}-${dStr}`;
 
-        const dateInput = document.querySelector('input[name="date"]');
-        if (dateInput) {
-            dateInput.value = dateString;
-        }
+        const startDateInput = document.querySelector('input[name="start_date"]');
+        const endDateInput = document.querySelector('input[name="end_date"]');
+
+        if (startDateInput) startDateInput.value = dateString;
+        if (endDateInput) endDateInput.value = dateString;
 
         // 2. 클래스 토글 방식으로 시각적 효과 처리 (크기 변화 없음)
         // 모든 셀에서 'selected' 클래스 제거
