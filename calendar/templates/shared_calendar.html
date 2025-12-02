@@ -24,17 +24,14 @@
         font-weight: bold; font-size: 0.8rem;
     }
 
-    /* 칩 스타일 업데이트 */
+    /* 칩 스타일 */
     .chip {
         padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;
         margin-bottom: 2px; display: block; white-space: nowrap;
         overflow: hidden; text-overflow: ellipsis; cursor: default;
     }
-    /* 모두 되는 시간 (강조) */
     .chip-common { background: #2979ff; color: white; font-weight: bold; border: 1px solid #2962ff; }
-    /* 내가 등록한 시간 */
     .chip-mine { background: #a5d6a7; color: #1b5e20; border: 1px solid #81c784; }
-    /* 다른 사람이 등록한 시간 */
     .chip-other { background: #eeeeee; color: #616161; border: 1px solid #e0e0e0; }
 
     /* 입력 폼 스타일 */
@@ -46,14 +43,16 @@
     .form-label { font-size: 0.85rem; font-weight: bold; color: #555; margin-bottom: 5px; display: block; }
     .time-select-row { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
     .time-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 0.9rem; text-align: center; }
+
+    /* [스타일 추가] 선택된 날짜 (박스 섀도우로 크기 변화 방지) */
     .cal-cell.selected {
-        box-shadow: inset 0 0 0 2px #2979ff !important; /* 안쪽으로 2px 파란 테두리 */
-        background-color: #f0f8ff; /* 선택 시 약간의 배경색 변경 (옵션) */
+        box-shadow: inset 0 0 0 2px #2979ff !important;
+        background-color: #f0f8ff;
     }
 </style>
 
 <div class="calendar-layout" style="position: relative;">
-    <!-- 초대 버튼 -->
+
     <button class="invite-btn" onclick="copyInviteLink()" title="초대 링크 복사">
         <i class="fas fa-link"></i>
     </button>
@@ -78,17 +77,19 @@
             {% endfor %}
         </div>
 
-        <!-- 시간 입력 폼 -->
-        <form action="{{ url_for('add_free_time') }}" method="POST">
+        <div class="free-time-form">
+            <h4 style="margin: 0 0 10px 0; font-size: 1.1rem; color: #2e7d32; border-bottom: 2px solid #a5d6a7; padding-bottom: 5px;">
+                <i class="far fa-clock"></i> I'm Free!
+            </h4>
+
+            <form action="{{ url_for('add_free_time') }}" method="POST">
                 <input type="hidden" name="group_id" value="{{ group.group_id }}">
                 <input type="hidden" name="invite_code" value="{{ invite_code }}">
 
                 <div style="margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 15px;">
                     <label class="form-label" style="color: #2e7d32;">시작 (Start)</label>
-
                     <input type="date" name="start_date" required
                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
-
                     <div class="time-select-row">
                         <select name="start_hour" class="time-select" required>
                             {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
@@ -102,10 +103,8 @@
 
                 <div style="margin-bottom: 15px;">
                     <label class="form-label" style="color: #c62828;">종료 (End)</label>
-
                     <input type="date" name="end_date" required
                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
-
                     <div class="time-select-row">
                         <select name="end_hour" class="time-select" required>
                             {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
@@ -122,6 +121,7 @@
                 </button>
             </form>
         </div>
+
         <div style="margin-top: 15px;">
             <a href="/" class="btn-outline" style="display: block; text-align: center; color: #666; text-decoration: none;">
                 <i class="fas fa-arrow-left"></i> 대시보드로
@@ -149,9 +149,8 @@
                 <div class="cal-cell" onclick="selectDate({{ year }}, {{ month }}, {{ i }})" style="cursor: pointer;">
                     <div class="date-num">{{ i }}</div>
 
-                    <!-- 1. 모두 가능한 시간 (가장 위에 표시) -->
                     {% for slot in common_slots %}
-                        {% if slot.start.strftime('%Y-%m-%d') == day_key %}
+                        {% if slot.start.strftime('%Y-%m-%d') <= day_key and slot.end.strftime('%Y-%m-%d') >= day_key %}
                             <div class="chip chip-common">
                                 <i class="fas fa-star" style="color: yellow; margin-right:3px;"></i>
                                 {{ slot.start.strftime('%H:%M') }} - {{ slot.end.strftime('%H:%M') }}
@@ -159,27 +158,22 @@
                         {% endif %}
                     {% endfor %}
 
-                    <!-- 2. 개별 멤버 시간 (전체 출력) -->
                     {% for slot in group_slots %}
-                        {% if slot.start_time.strftime('%Y-%m-%d') == day_key %}
+                        {% if slot.start_time.strftime('%Y-%m-%d') <= day_key and slot.end_time.strftime('%Y-%m-%d') >= day_key %}
                             {% if slot.username == current_user.username %}
-                                <!-- 내 일정 -->
                                 <div class="chip chip-mine">
                                     {{ slot.start_time.strftime('%H:%M') }} (나)
                                 </div>
                             {% else %}
-                                <!-- 다른 사람 일정 -->
                                 <div class="chip chip-other">
                                     {{ slot.start_time.strftime('%H:%M') }} ({{ slot.username }})
                                 </div>
                             {% endif %}
                         {% endif %}
                     {% endfor %}
-
                 </div>
             {% endfor %}
 
-            <!-- 빈 칸 채우기 -->
             {% set start_blank_count = (calendar.monthrange(year, month)[0] + 1) % 7 %}
             {% set total_cells = start_blank_count + days_in_month %}
             {% if total_cells % 7 != 0 %}
@@ -214,58 +208,51 @@
         });
     }
 
-    // 날짜 클릭 시 입력 폼 연동 및 시각적 효과
+    // 날짜 클릭 시 시작/종료일 자동 입력 + 시각 효과
     function selectDate(year, month, day) {
-        // 1. 날짜 포맷팅 및 입력창 값 설정
         const mStr = month < 10 ? '0' + month : month;
         const dStr = day < 10 ? '0' + day : day;
         const dateString = `${year}-${mStr}-${dStr}`;
 
-        const startDateInput = document.querySelector('input[name="start_date"]');
-        const endDateInput = document.querySelector('input[name="end_date"]');
+        // 시작일/종료일 모두 클릭한 날짜로 설정
+        const startInput = document.querySelector('input[name="start_date"]');
+        const endInput = document.querySelector('input[name="end_date"]');
 
-        if (startDateInput) startDateInput.value = dateString;
-        if (endDateInput) endDateInput.value = dateString;
+        if (startInput) startInput.value = dateString;
+        if (endInput) endInput.value = dateString;
 
-        // 2. 클래스 토글 방식으로 시각적 효과 처리 (크기 변화 없음)
-        // 모든 셀에서 'selected' 클래스 제거
+        // 선택된 셀 시각적 강조
         document.querySelectorAll('.cal-cell').forEach(el => el.classList.remove('selected'));
-
-        // 현재 클릭한 셀에만 'selected' 클래스 추가
         if(event && event.currentTarget) {
             event.currentTarget.classList.add('selected');
         }
     }
 
-    // ----------------------------------------------------
-    // [핵심] 스마트 자동 새로고침 로직
-    // ----------------------------------------------------
-    let currentLastId = {{ last_id }};  // 서버에서 받은 현재 상태 ID
+    // 스마트 자동 새로고침
+    let currentLastId = {{ last_id }};
     const groupId = {{ group.group_id }};
-    let isTyping = false;  // 사용자가 입력 중인지 체크하는 플래그
+    let isTyping = false;
 
-    // 1. 모든 입력 필드(input, select)에 대해 감시
+    // 입력 중 감지
     const inputFields = document.querySelectorAll('input, select');
     inputFields.forEach(field => {
-        field.addEventListener('focus', () => { isTyping = true; }); // 입력 시작
-        field.addEventListener('blur', () => { isTyping = false; }); // 입력 끝
+        field.addEventListener('focus', () => { isTyping = true; });
+        field.addEventListener('blur', () => { isTyping = false; });
     });
 
-    // 2. 1.5초마다 변경사항 체크 (폴링)
+    // 1.5초마다 업데이트 확인
     setInterval(() => {
-        // 내가 입력 중이면 서버 확인조차 하지 않거나, 확인해도 새로고침 안 함
-        if (isTyping) return;
+        if (isTyping) return; // 입력 중이면 확인 안 함
 
         fetch(`/api/group_status/${groupId}`)
             .then(response => response.json())
             .then(data => {
-                // 서버의 최신 ID가 내 화면의 ID보다 크면 (누군가 추가했으면)
                 if (data.last_id > currentLastId) {
-                    console.log("새로운 일정이 감지되어 새로고침합니다.");
+                    console.log("새 데이터 감지! 새로고침...");
                     window.location.reload();
                 }
             })
-            .catch(err => console.error("Update check failed", err));
+            .catch(err => console.error("통신 오류:", err));
     }, 1500);
 </script>
 {% endblock %}
