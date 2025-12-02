@@ -28,7 +28,7 @@
     .chip {
         padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;
         margin-bottom: 2px; display: block; white-space: nowrap;
-        overflow: hidden; text-overflow: ellipsis; cursor: default;
+        overflow: hidden; text-overflow: ellipsis; cursor: default; /* 마우스 올리면 툴팁 나옴 */
     }
     .chip-common { background: #2979ff; color: white; font-weight: bold; border: 1px solid #2962ff; }
     .chip-mine { background: #a5d6a7; color: #1b5e20; border: 1px solid #81c784; }
@@ -44,7 +44,7 @@
     .time-select-row { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
     .time-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 0.9rem; text-align: center; }
 
-    /* [스타일 추가] 선택된 날짜 (박스 섀도우로 크기 변화 방지) */
+    /* 선택된 날짜 (박스 섀도우로 크기 변화 방지) */
     .cal-cell.selected {
         box-shadow: inset 0 0 0 2px #2979ff !important;
         background-color: #f0f8ff;
@@ -151,7 +151,8 @@
 
                     {% for slot in common_slots %}
                         {% if slot.start.strftime('%Y-%m-%d') <= day_key and slot.end.strftime('%Y-%m-%d') >= day_key %}
-                            <div class="chip chip-common">
+                            <div class="chip chip-common"
+                                 title="[모두 가능]&#10;시작: {{ slot.start.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end.strftime('%Y-%m-%d %H:%M') }}">
                                 <i class="fas fa-star" style="color: yellow; margin-right:3px;"></i>
                                 {{ slot.start.strftime('%H:%M') }} - {{ slot.end.strftime('%H:%M') }}
                             </div>
@@ -161,11 +162,13 @@
                     {% for slot in group_slots %}
                         {% if slot.start_time.strftime('%Y-%m-%d') <= day_key and slot.end_time.strftime('%Y-%m-%d') >= day_key %}
                             {% if slot.username == current_user.username %}
-                                <div class="chip chip-mine">
+                                <div class="chip chip-mine"
+                                     title="[나의 일정]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
                                     {{ slot.start_time.strftime('%H:%M') }} (나)
                                 </div>
                             {% else %}
-                                <div class="chip chip-other">
+                                <div class="chip chip-other"
+                                     title="[{{ slot.username }}님의 일정]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
                                     {{ slot.start_time.strftime('%H:%M') }} ({{ slot.username }})
                                 </div>
                             {% endif %}
