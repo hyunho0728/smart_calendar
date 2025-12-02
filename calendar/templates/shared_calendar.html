@@ -79,41 +79,42 @@
         </div>
 
         <!-- 시간 입력 폼 -->
-        <div class="free-time-form">
-            <h4 style="margin: 0 0 10px 0; font-size: 1.1rem; color: #2e7d32; border-bottom: 2px solid #a5d6a7; padding-bottom: 5px;">
-                <i class="far fa-clock"></i> I'm Free!
-            </h4>
-
-            <form action="{{ url_for('add_free_time') }}" method="POST">
+        <form action="{{ url_for('add_free_time') }}" method="POST">
                 <input type="hidden" name="group_id" value="{{ group.group_id }}">
                 <input type="hidden" name="invite_code" value="{{ invite_code }}">
 
+                <div style="margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 15px;">
+                    <label class="form-label" style="color: #2e7d32;">시작 (Start)</label>
+
+                    <input type="date" name="start_date" required
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
+
+                    <div class="time-select-row">
+                        <select name="start_hour" class="time-select" required>
+                            {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
+                        </select>
+                        :
+                        <select name="start_min" class="time-select" required>
+                            <option value="00">00분</option><option value="30">30분</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 15px;">
-                    <label class="form-label">날짜 선택</label>
-                    <input type="date" name="date" required
-                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
-                </div>
+                    <label class="form-label" style="color: #c62828;">종료 (End)</label>
 
-                <label class="form-label">시작 시간</label>
-                <div class="time-select-row">
-                    <select name="start_hour" class="time-select" required>
-                        {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
-                    </select>
-                    :
-                    <select name="start_min" class="time-select" required>
-                        <option value="00">00분</option><option value="30">30분</option>
-                    </select>
-                </div>
+                    <input type="date" name="end_date" required
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
 
-                <label class="form-label">종료 시간</label>
-                <div class="time-select-row">
-                    <select name="end_hour" class="time-select" required>
-                        {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
-                    </select>
-                    :
-                    <select name="end_min" class="time-select" required>
-                        <option value="00">00분</option><option value="30">30분</option>
-                    </select>
+                    <div class="time-select-row">
+                        <select name="end_hour" class="time-select" required>
+                            {% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}
+                        </select>
+                        :
+                        <select name="end_min" class="time-select" required>
+                            <option value="00">00분</option><option value="30">30분</option>
+                        </select>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-add" style="width: 100%; margin-top: 5px; background: #66bb6a; border-color: #66bb6a; padding: 10px;">
