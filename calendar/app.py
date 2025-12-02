@@ -731,8 +731,47 @@ def api_get_activity():
 @app.route('/')
 @login_required
 def dashboard():
-    today_info = {"username": current_user.username, "weather": get_real_weather(), "schedule": [],
-                  "ootd_text": "로딩중..."}
+    now = datetime.now()
+    weather_info = get_real_weather("Anseong")
+    today_date_obj = now.date()
+
+    # [복구] DB에서 내 일정 가져오기
+    events_from_db = fetch_events_from_db(user_id=current_user.id)
+
+    dashboard_schedule = []
+    for date_str, events in events_from_db.items():
+        try:
+            event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            diff = (event_date - today_date_obj).days
+
+            # 오늘 포함, 미래의 일정만 표시
+            if diff >= 0:
+                d_day_str = "D-Day" if diff == 0 else f"D-{diff}"
+                for event in events:
+                    dashboard_schedule.append({
+                        "d_day": d_day_str,
+                        "time": event.get('time', ''),
+                        "title": event['title'],
+                        "full_date": date_str,
+                        "sort_time": event.get('time') or "23:59"
+                    })
+        except ValueError:
+            continue
+
+    # 날짜 및 시간순 정렬
+    dashboard_schedule.sort(key=lambda x: (x['full_date'], x['sort_time']))
+
+    today_info = {
+        "username": current_user.username,
+        "date": now.strftime("%m/%d/%Y"),
+        "time_now": now.strftime("%I:%M %p"),
+        "weather": weather_info,
+        "ootd_text": "로딩중...",
+        "schedule": dashboard_schedule,
+        # [복구] 누락되었던 location(맛집)과 activity(활동) 초기값 추가
+        "location": {"name": "로딩중...", "tags": [], "menu": ""},
+        "activity": []
+    }
     return render_template('dashboard.html', info=today_info)
 
 
