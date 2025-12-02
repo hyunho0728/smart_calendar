@@ -2,17 +2,21 @@
 
 {% block content %}
 <style>
-    /* 공유 캘린더 전용 스타일 */
+    /* 1. 레이아웃 & 공유 캘린더 전용 스타일 */
+    .calendar-layout { display: flex; gap: 20px; position: relative; }
+    .sidebar { width: 300px; flex-shrink: 0; }
+    .main-cal { flex: 1; }
+
     .invite-btn {
         width: 50px; height: 50px; border-radius: 50%;
         background: #ff5252; color: white; border: none;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
         display: flex; align-items: center; justify-content: center;
         font-size: 1.2rem; cursor: pointer; transition: transform 0.2s;
-        position: absolute; top: 20px; left: 20px; z-index: 10;
+        position: absolute; top: 10px; left: 0; z-index: 10;
     }
     .invite-btn:hover { transform: scale(1.1); background: #ff1744; }
-    
+
     .member-list-item {
         display: flex; align-items: center; gap: 10px;
         padding: 8px 0; border-bottom: 1px dashed #eee;
@@ -31,11 +35,8 @@
         overflow: hidden; text-overflow: ellipsis; cursor: default;
     }
     .chip-common { background: #2979ff; color: white; font-weight: bold; border: 1px solid #2962ff; }
-
-    /* [수정] 내 칩에 포인터 커서 추가 (클릭 가능하다는 표시) */
     .chip-mine { background: #a5d6a7; color: #1b5e20; border: 1px solid #81c784; cursor: pointer; }
     .chip-mine:hover { background: #81c784; }
-
     .chip-other { background: #eeeeee; color: #616161; border: 1px solid #e0e0e0; }
 
     /* 입력 폼 스타일 */
@@ -48,27 +49,31 @@
     .time-select-row { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
     .time-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 0.9rem; text-align: center; }
 
-    /* 선택된 날짜 */
+    /* 선택된 날짜 (박스 섀도우로 크기 변화 방지) */
     .cal-cell.selected {
         box-shadow: inset 0 0 0 2px #2979ff !important;
         background-color: #f0f8ff;
     }
 
-    /* [추가] 모달 스타일 */
+    /* 모달 스타일 */
     .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
     .modal-content { background-color: #fff; margin: 10% auto; padding: 25px; border-radius: 12px; width: 90%; max-width: 350px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; animation: fadeIn 0.2s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     .close { position: absolute; top: 15px; right: 20px; color: #aaa; font-size: 24px; font-weight: bold; cursor: pointer; }
-    .close:hover { color: #000; }
+
+    /* [추가] 모든 입력 필드의 테두리와 패딩을 너비에 포함시킴 (튀어나옴 해결) */
+    input[type="date"], select, .form-control {
+        box-sizing: border-box !important;
+    }
 </style>
 
-<div class="calendar-layout" style="position: relative;">
-
-    <button class="invite-btn" onclick="copyInviteLink()" title="초대 링크 복사">
-        <i class="fas fa-link"></i>
-    </button>
+<div class="calendar-layout">
 
     <aside class="sidebar card" style="padding-top: 60px;">
+        <button class="invite-btn" onclick="copyInviteLink()" title="초대 링크 복사">
+            <i class="fas fa-link"></i>
+        </button>
+
         <h3 style="border-bottom: 2px solid #333; padding-bottom: 10px;">
             <i class="fas fa-users"></i> Members ({{ members|length }})
         </h3>
@@ -103,7 +108,7 @@
                     <div class="time-select-row">
                         <select name="start_hour" class="time-select" required>{% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}</select>
                         :
-                        <select name="start_min" class="time-select" required><option value="00">00분</option><option value="30">30분</option></select>
+                        <select name="start_min" class="time-select" required>{% for m in range(0, 60) %}<option value="{{ '%02d' % m }}">{{ '%02d' % m }}분</option>{% endfor %}</select>
                     </div>
                 </div>
 
@@ -113,7 +118,7 @@
                     <div class="time-select-row">
                         <select name="end_hour" class="time-select" required>{% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}</select>
                         :
-                        <select name="end_min" class="time-select" required><option value="00">00분</option><option value="30">30분</option></select>
+                        <select name="end_min" class="time-select" required>{% for m in range(0, 60) %}<option value="{{ '%02d' % m }}">{{ '%02d' % m }}분</option>{% endfor %}</select>
                     </div>
                 </div>
 
@@ -152,8 +157,7 @@
 
                     {% for slot in common_slots %}
                         {% if slot.start.strftime('%Y-%m-%d') <= day_key and slot.end.strftime('%Y-%m-%d') >= day_key %}
-                            <div class="chip chip-common"
-                                 title="[모두 가능]&#10;시작: {{ slot.start.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end.strftime('%Y-%m-%d %H:%M') }}">
+                            <div class="chip chip-common" title="[모두 가능]&#10;시작: {{ slot.start.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end.strftime('%Y-%m-%d %H:%M') }}">
                                 <i class="fas fa-star" style="color: yellow; margin-right:3px;"></i>
                                 {{ slot.start.strftime('%H:%M') }} - {{ slot.end.strftime('%H:%M') }}
                             </div>
@@ -165,12 +169,11 @@
                             {% if slot.username == current_user.username %}
                                 <div class="chip chip-mine"
                                      onclick="openEditModal(event, '{{ slot.slot_id }}', '{{ slot.start_time.strftime('%Y-%m-%d') }}', '{{ slot.start_time.strftime('%H') }}', '{{ slot.start_time.strftime('%M') }}', '{{ slot.end_time.strftime('%Y-%m-%d') }}', '{{ slot.end_time.strftime('%H') }}', '{{ slot.end_time.strftime('%M') }}')"
-                                     title="[클릭해서 수정/삭제]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
-                                    {{ slot.start_time.strftime('%H:%M') }} (나) <i class="fas fa-pen" style="font-size:0.6rem; margin-left:3px;"></i>
+                                     title="[내 일정 수정/삭제]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
+                                    {{ slot.start_time.strftime('%H:%M') }} (나) <i class="fas fa-pen" style="font-size:0.6rem;"></i>
                                 </div>
                             {% else %}
-                                <div class="chip chip-other"
-                                     title="[{{ slot.username }}님의 일정]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
+                                <div class="chip chip-other" title="[{{ slot.username }}님의 일정]&#10;시작: {{ slot.start_time.strftime('%Y-%m-%d %H:%M') }}&#10;종료: {{ slot.end_time.strftime('%Y-%m-%d %H:%M') }}">
                                     {{ slot.start_time.strftime('%H:%M') }} ({{ slot.username }})
                                 </div>
                             {% endif %}
@@ -217,7 +220,7 @@
                 <div class="time-select-row">
                     <select name="start_hour" id="modal_start_hour" class="time-select">{% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}</select>
                     :
-                    <select name="start_min" id="modal_start_min" class="time-select"><option value="00">00분</option><option value="30">30분</option></select>
+                    <select name="start_min" id="modal_start_min" class="time-select">{% for m in range(0, 60) %}<option value="{{ '%02d' % m }}">{{ '%02d' % m }}분</option>{% endfor %}</select>
                 </div>
             </div>
 
@@ -227,7 +230,7 @@
                 <div class="time-select-row">
                     <select name="end_hour" id="modal_end_hour" class="time-select">{% for h in range(0, 24) %}<option value="{{ '%02d' % h }}">{{ '%02d' % h }}시</option>{% endfor %}</select>
                     :
-                    <select name="end_min" id="modal_end_min" class="time-select"><option value="00">00분</option><option value="30">30분</option></select>
+                    <select name="end_min" id="modal_end_min" class="time-select">{% for m in range(0, 60) %}<option value="{{ '%02d' % m }}">{{ '%02d' % m }}분</option>{% endfor %}</select>
                 </div>
             </div>
 
@@ -236,10 +239,7 @@
                 <button type="button" onclick="submitDelete()" class="btn-add" style="flex: 0.5; background: #ff5252; padding: 10px;">삭제</button>
             </div>
         </form>
-
-        <form id="deleteForm" method="POST" style="display:none;">
-            <input type="hidden" name="invite_code" value="{{ invite_code }}">
-        </form>
+        <form id="deleteForm" method="POST" style="display:none;"><input type="hidden" name="invite_code" value="{{ invite_code }}"></form>
     </div>
 </div>
 
@@ -249,6 +249,7 @@
         navigator.clipboard.writeText(url).then(() => alert("초대 링크가 복사되었습니다!")).catch(err => alert("링크 복사 실패"));
     }
 
+    // 날짜 선택 (시작일/종료일 모두 자동 입력 + 강조)
     function selectDate(year, month, day) {
         const mStr = month < 10 ? '0' + month : month;
         const dStr = day < 10 ? '0' + day : day;
@@ -263,25 +264,20 @@
         if(event && event.currentTarget) event.currentTarget.classList.add('selected');
     }
 
-    // [추가] 모달 열기 함수 (서버 데이터를 인자로 받음)
+    // 모달 제어
     function openEditModal(event, slotId, sDate, sHour, sMin, eDate, eHour, eMin) {
-        event.stopPropagation(); // 중요: 부모(날짜 셀)의 클릭 이벤트 방지
-
+        event.stopPropagation();
         document.getElementById('modal_slot_id').value = slotId;
-
         document.getElementById('modal_start_date').value = sDate;
         document.getElementById('modal_start_hour').value = sHour;
         document.getElementById('modal_start_min').value = sMin;
-
         document.getElementById('modal_end_date').value = eDate;
         document.getElementById('modal_end_hour').value = eHour;
         document.getElementById('modal_end_min').value = eMin;
 
-        // 삭제 폼의 Action URL 설정
         document.getElementById('deleteForm').action = `/delete_slot/${slotId}`;
-
         document.getElementById('editModal').style.display = "block";
-        isTyping = true; // 모달 열려있을 때 새로고침 방지
+        isTyping = true;
     }
 
     function closeEditModal() {
@@ -290,17 +286,11 @@
     }
 
     function submitDelete() {
-        if(confirm("정말 이 일정을 삭제하시겠습니까?")) {
-            document.getElementById('deleteForm').submit();
-        }
+        if(confirm("정말 이 일정을 삭제하시겠습니까?")) document.getElementById('deleteForm').submit();
     }
 
-    // 배경 클릭 시 모달 닫기
     window.onclick = function(event) {
-        const modal = document.getElementById('editModal');
-        if (event.target == modal) {
-            closeEditModal();
-        }
+        if (event.target == document.getElementById('editModal')) closeEditModal();
     }
 
     // 스마트 새로고침
@@ -318,9 +308,7 @@
         if (isTyping) return;
         fetch(`/api/group_status/${groupId}`)
             .then(response => response.json())
-            .then(data => {
-                if (data.last_id > currentLastId) window.location.reload();
-            })
+            .then(data => { if (data.last_id > currentLastId) window.location.reload(); })
             .catch(err => console.error("Update check failed", err));
     }, 1500);
 </script>
