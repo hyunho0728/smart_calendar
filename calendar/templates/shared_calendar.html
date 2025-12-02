@@ -46,6 +46,10 @@
     .form-label { font-size: 0.85rem; font-weight: bold; color: #555; margin-bottom: 5px; display: block; }
     .time-select-row { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; }
     .time-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 0.9rem; text-align: center; }
+    .cal-cell.selected {
+        box-shadow: inset 0 0 0 2px #2979ff !important; /* 안쪽으로 2px 파란 테두리 */
+        background-color: #f0f8ff; /* 선택 시 약간의 배경색 변경 (옵션) */
+    }
 </style>
 
 <div class="calendar-layout" style="position: relative;">
@@ -141,7 +145,7 @@
             {% for i in range(1, days_in_month + 1) %}
                 {% set day_key = '%04d-%02d-%02d' % (year, month, i) %}
 
-                <div class="cal-cell">
+                <div class="cal-cell" onclick="selectDate({{ year }}, {{ month }}, {{ i }})" style="cursor: pointer;">
                     <div class="date-num">{{ i }}</div>
 
                     <!-- 1. 모두 가능한 시간 (가장 위에 표시) -->
@@ -208,5 +212,58 @@
             alert("링크 복사에 실패했습니다. URL창을 복사해주세요.");
         });
     }
+
+    // 날짜 클릭 시 입력 폼 연동 및 시각적 효과
+    function selectDate(year, month, day) {
+        // 1. 날짜 포맷팅 및 입력창 값 설정
+        const mStr = month < 10 ? '0' + month : month;
+        const dStr = day < 10 ? '0' + day : day;
+        const dateString = `${year}-${mStr}-${dStr}`;
+
+        const dateInput = document.querySelector('input[name="date"]');
+        if (dateInput) {
+            dateInput.value = dateString;
+        }
+
+        // 2. 클래스 토글 방식으로 시각적 효과 처리 (크기 변화 없음)
+        // 모든 셀에서 'selected' 클래스 제거
+        document.querySelectorAll('.cal-cell').forEach(el => el.classList.remove('selected'));
+
+        // 현재 클릭한 셀에만 'selected' 클래스 추가
+        if(event && event.currentTarget) {
+            event.currentTarget.classList.add('selected');
+        }
+    }
+
+    // ----------------------------------------------------
+    // [핵심] 스마트 자동 새로고침 로직
+    // ----------------------------------------------------
+    let currentLastId = {{ last_id }};  // 서버에서 받은 현재 상태 ID
+    const groupId = {{ group.group_id }};
+    let isTyping = false;  // 사용자가 입력 중인지 체크하는 플래그
+
+    // 1. 모든 입력 필드(input, select)에 대해 감시
+    const inputFields = document.querySelectorAll('input, select');
+    inputFields.forEach(field => {
+        field.addEventListener('focus', () => { isTyping = true; }); // 입력 시작
+        field.addEventListener('blur', () => { isTyping = false; }); // 입력 끝
+    });
+
+    // 2. 1.5초마다 변경사항 체크 (폴링)
+    setInterval(() => {
+        // 내가 입력 중이면 서버 확인조차 하지 않거나, 확인해도 새로고침 안 함
+        if (isTyping) return;
+
+        fetch(`/api/group_status/${groupId}`)
+            .then(response => response.json())
+            .then(data => {
+                // 서버의 최신 ID가 내 화면의 ID보다 크면 (누군가 추가했으면)
+                if (data.last_id > currentLastId) {
+                    console.log("새로운 일정이 감지되어 새로고침합니다.");
+                    window.location.reload();
+                }
+            })
+            .catch(err => console.error("Update check failed", err));
+    }, 1500);
 </script>
 {% endblock %}

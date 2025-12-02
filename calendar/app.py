@@ -381,6 +381,7 @@ def shared_calendar(invite_code):
     members = []
     group_slots = []
     common_slots = []
+    last_id = 0  # 상태 추적 변수
 
     try:
         with conn.cursor() as cursor:
@@ -412,6 +413,12 @@ def shared_calendar(invite_code):
                            WHERE gm.group_id = %s
                            """, (group_id,))
             members = cursor.fetchall()
+
+            # 3.5 현재 그룹의 최신 슬롯 ID 조회
+            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
+            res = cursor.fetchone()
+            if res and res['last_id']:
+                last_id = res['last_id']
 
             # 4. 모든 멤버의 슬롯 가져오기
             cursor.execute("""
@@ -465,6 +472,7 @@ def shared_calendar(invite_code):
                            invite_code=invite_code,
                            group_slots=group_slots,
                            common_slots=common_slots,
+                           last_id=last_id,
                            year=year, month=month, days_in_month=days_in_month,
                            calendar=calendar)
 
@@ -516,6 +524,23 @@ def add_free_time():
 
     return redirect(url_for('shared_calendar', invite_code=invite_code))
 
+# 3.5. 그룹 데이터 변경 확인용 API
+@app.route('/api/group_status/<int:group_id>')
+def group_status(group_id):
+    conn = get_db_connection()
+    last_id = 0
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("USE cal_db")
+
+            # 가장 마지막에 추가된 슬롯의 ID를 조회 (변경사항 감지용)
+            cursor.execute("SELECT MAX(slot_id) as last_id FROM available_slots WHERE group_id = %s", (group_id,))
+            result = cursor.fetchone()
+            if result and result['last_id']:
+                last_id = result['last_id']
+    finally:
+        conn.close()
+    return jsonify({"last_id": last_id})
 
 # ---------------------------------------------------------
 # [기존 라우트 및 Gemini AI 설정 (복구됨)]
